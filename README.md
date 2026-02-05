@@ -20,5 +20,8 @@ As a Biologist, I understand that "high-quality data" is a clinical requirement,
 * **Art. 10.3:** Missing statistical bridges between public datasets and target clinical populations.
 * **Art. 14.4:** Retrospective oversight models (weekly dashboards) that fail the "real-time intervention" mandate.
 
+### 📊 Visual Readiness Report
+![Compliance Readiness Chart](readiness_score.png)
+
 ---
 *Bridging the gap between Healthcare Policy and AI Engineering.*
