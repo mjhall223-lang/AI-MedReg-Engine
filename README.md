@@ -27,13 +27,18 @@ As a Biologist, I understand that "high-quality data" is a clinical requirement,
 *Bridging the gap between Healthcare Policy and AI Engineering.*
 ---
 
+---
+
 ## 💼 Partnerships & Consulting
 I am currently selecting **one Beta Partner** in the MedTech or Diagnostic space for a complimentary **"Dark Audit"** (Private, local-first gap analysis). 
 
 If you are developing a High-Risk AI tool and need to verify your **Article 10/14 compliance** before the August 2026 deadline, let's talk.
 
-📫 **Reach Out:** [Your LinkedIn Link Here]  
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/profile/view?m_content=profile&utm_medium=ios_app)
+
 📍 **Location:** Washington D.C. / Maryland / Remote  
 🧬 **Focus:** Bio-Statistical Representativeness & Human-in-the-Loop Oversight
+
+---
 
 ---
