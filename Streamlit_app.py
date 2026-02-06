@@ -1,83 +1,68 @@
 import streamlit as st
+from langchain_groq import ChatGroq
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+import tempfile
 import os
 
-# 1. Force-load the heavy lifting
+# --- PAGE SETUP ---
+st.set_page_config(page_title="Bio-AI Compliance Engine", page_icon="🛡️")
+st.title("🛡️ Bio-AI Compliance Engine")
+st.markdown("> **Target:** EU AI Act (August 2026 Mandate)")
+
+# --- 1. INITIALIZE BRAIN (Using Secrets) ---
 try:
-    from langchain_community.document_loaders import PyPDFLoader
-    from langchain_community.vectorstores import FAISS
-    from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-    from langchain.chains import RetrievalQA
-except ImportError as e:
-    st.error(f"⚠️ System still installing: {e}. Please wait 2 minutes.")
+    groq_api_key = st.secrets["GROQ_API_KEY"]
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-specdec", api_key=groq_api_key)
+except Exception as e:
+    st.error("Missing GROQ_API_KEY in Streamlit Secrets!")
     st.stop()
 
-# 2. Page Configuration
-st.set_page_config(page_title="AI-MedReg Auditor", page_icon="🛡️", layout="wide")
-st.title("🛡️ AI-MedReg Auditor: Professional Edition")
+# --- 2. FILE UPLOAD ---
+uploaded_file = st.file_uploader("Upload Clinical Tech Documentation (PDF)", type="pdf")
 
-# 3. Secret Key Check
-if "HUGGINGFACEHUB_API_TOKEN" not in st.secrets:
-    st.error("🚨 Configuration Error: Go to Settings > Secrets and add 'HUGGINGFACEHUB_API_TOKEN'.")
-    st.stop()
+if uploaded_file:
+    with st.spinner("Analyzing Documentation..."):
+        # Save to temp file for processing
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
 
-@st.cache_resource
-def initialize_brain():
-    llm = HuggingFaceEndpoint(
-        repo_id="mistralai/Mistral-7B-Instruct-v0.3",
-        temperature=0.2,
-        huggingfacehub_api_token=st.secrets["HUGGINGFACEHUB_API_TOKEN"]
-    )
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    return llm, embeddings
+        # Load & Split
+        loader = PyPDFLoader(tmp_path)
+        docs = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+        chunks = text_splitter.split_documents(docs)
 
-llm, embeddings = initialize_brain()
+        # Create Vector DB (Fast local embeddings)
+        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        vector_db = FAISS.from_documents(chunks, embeddings)
+        
+        st.success(f"Audit Engine Online: {len(chunks)} segments indexed.")
 
-# 4. Processing Engine
-def build_engine(uploaded_files):
-    docs = []
-    # Check for master files
-    master_files = ["EU regulations.pdf", "IVDR.pdf", "ivdr.pdf", "Ivdr.pdf"]
-    for mf in master_files:
-        if os.path.exists(mf):
-            try: docs.extend(PyPDFLoader(mf).load())
-            except: pass
-    
-    # Check for user files
-    for f in uploaded_files:
-        temp = f"temp_{f.name}"
-        with open(temp, "wb") as b: b.write(f.getbuffer())
-        try: docs.extend(PyPDFLoader(temp).load())
-        finally:
-            if os.path.exists(temp): os.remove(temp)
+        # --- 3. AUDIT CONSOLE ---
+        query = st.text_input("Enter Audit Question (e.g., 'Check Article 10.3 compliance')", 
+                             value="Audit this summary against Article 10 bias and Article 14 human oversight.")
+
+        if st.button("Run Audit"):
+            # Retrieval
+            search_results = vector_db.similarity_search(query, k=5)
+            context = "\n\n".join([d.page_content for d in search_results])
             
-    if not docs:
-        raise ValueError("No documents found to index.")
-        
-    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
-    return FAISS.from_documents(splitter.split_documents(docs), embeddings)
+            # Prompting
+            prompt = f"""
+            SYSTEM: You are a Lead AI Regulatory Auditor for Medical Devices. 
+            Ground every answer in Article 10 (Data Governance) and Article 14 (Human Oversight).
+            FORMAT: 🔴 RED (Fail), 🟡 YELLOW (Warning), 🟢 GREEN (Pass).
 
-# 5. The UI
-files = st.sidebar.file_uploader("Upload Tech Files (PDF)", type="pdf", accept_multiple_files=True)
+            CONTEXT:
+            {context}
 
-if files:
-    try:
-        db = build_engine(files)
-        st.sidebar.success("🚀 Engine Online")
-        
-        st.subheader("🕵️ Compliance Audit & Suggestions")
-        query = st.text_area("Audit Objective:", placeholder="e.g. Provide a gap analysis for Article 10.3 and remediation steps.")
-        
-        if st.button("🔥 RUN NUCLEAR AUDIT"):
-            if query:
-                with st.spinner("🧠 Generating Suggestions..."):
-                    qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=db.as_retriever(search_kwargs={"k": 5}))
-                    response = qa.invoke(query)
-                    st.success("✅ Audit Complete")
-                    st.markdown("#### 📝 Report & Prep Suggestions")
-                    st.write(response["result"])
-            else: st.warning("Please enter an objective.")
-    except Exception as e:
-        st.error(f"❌ System Error: {e}")
-else:
-    st.info("👋 Ready to begin. Upload a file in the sidebar to start the audit.")
+            QUESTION: {query}
+            """
+            
+            response = llm.invoke(prompt)
+            st.markdown("### 📋 AUDIT REPORT")
+            st.write(response.content)
