@@ -1,72 +1,82 @@
 import streamlit as st
 import os
-import torch
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# --- 1. SAAS UI SETUP ---
-st.set_page_config(page_title="AI-MedReg Engine", page_icon="🛡️", layout="wide")
-
-# Custom CSS to make it look like a high-end medical portal
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
-
+# 1. Page Configuration
+st.set_page_config(page_title="AI-MedReg Auditor", page_icon="🛡️")
 st.title("🛡️ AI-MedReg Auditor")
-st.markdown("### Clinical AI Gap Analysis | EU AI Act 2026 Mandate")
+st.markdown("### 2026 EU AI Act & IVDR Compliance Engine")
 
-# --- 2. NUCLEAR DATA INGESTION ---
-# This part replaces your folder walk with an "Upload" interface
-uploaded_files = st.file_uploader("Upload Tech Files (PDF)", type="pdf", accept_multiple_files=True)
+# Security Check: Secrets
+if "HUGGINGFACEHUB_API_TOKEN" not in st.secrets:
+    st.error("🚨 API Token missing! Go to Settings > Secrets and add 'HUGGINGFACEHUB_API_TOKEN'.")
+    st.stop()
 
-if uploaded_files:
-    with st.spinner("🧠 Analyzing Clinical Logic..."):
-        all_docs = []
-        # Save and load uploaded files
-        for uploaded_file in uploaded_files:
-            with open(uploaded_file.name, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            loader = PyPDFLoader(uploaded_file.name)
+# 2. Setup the Brain
+@st.cache_resource
+def load_embeddings():
+    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+embeddings = load_embeddings()
+
+def build_engine(uploaded_files):
+    all_docs = []
+    
+    # MASTER REGULATIONS: Checking all possible naming variations to prevent 'File Not Found'
+    possible_names = ["EU regulations.pdf", "IVDR.pdf", "ivdr.pdf", "Ivdr.pdf", "ivdr.pdf.pdf"]
+    
+    for mf in possible_names:
+        if os.path.exists(mf):
+            try:
+                loader = PyPDFLoader(mf)
+                all_docs.extend(loader.load())
+            except Exception:
+                continue
+    
+    # CLIENT DOCUMENTS: Temporary processing
+    for uploaded_file in uploaded_files:
+        temp_name = f"temp_{uploaded_file.name}"
+        with open(temp_name, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        try:
+            loader = PyPDFLoader(temp_name)
             all_docs.extend(loader.load())
-            os.remove(uploaded_file.name) # Cleanup
+        finally:
+            if os.path.exists(temp_name):
+                os.remove(temp_name)
 
-        indexed.")
+    if not all_docs:
+        raise ValueError("No documents found. Check if the PDFs are in your GitHub folder.")
 
+    # Nuclear Splitting & Indexing
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+    chunks = text_splitter.split_documents(all_docs)
+    vector_db = FAISS.from_documents(chunks, embeddings)
+    return vector_db, len(chunks)
 
-    # --- 3. THE HIGH-PRECISION AUDIT CONSOLE ---
-    st.divider()
-    col1, col2 = st.columns([2, 1])
+# 3. User Interface
+files = st.file_uploader("Upload Tech Files for Audit (PDF)", type="pdf", accept_multiple_files=True)
 
-    with col1:
-        query = st.text_input("Enter Compliance Probe:", "Audit Article 10.3 (Statistical Bias) and Article 14 (Human Oversight)")
-        
-        if st.button("🔥 RUN NUCLEAR AUDIT"):
-            # This mimics your perform_audit function logic
-            docs = vector_db.similarity_search(query, k=5)
+if files:
+    with st.spinner("🔄 Syncing Master Laws + Tech Files..."):
+        try:
+            db, count = build_engine(files)
+            st.success(f"🚀 Audit Engine Online: {count} data segments indexed.")
             
-            st.markdown("## 🔴 Audit Findings & Gaps")
-            for i, doc in enumerate(docs):
-                with st.expander(f"Finding {i+1}: Evidence from Documentation"):
-                    st.write(doc.page_content)
-                    st.caption(f"Source: {doc.metadata.get('source', 'Unknown')}")
+            query = st.text_input("Enter Compliance Probe (e.g. 'Audit Article 10.3 gaps')")
             
-            st.error("RED FLAG: Documentation fails to specify real-time override protocols (Art 14.4).")
-
-    with col2:
-        st.info("💡 **Consultant Tip:** Use this probe to identify if the training data matches the Maryland/DC patient demographic markers.")
-        
-        # Add a placeholder for that Readiness Chart we built
-        st.markdown("### Readiness Preview")
-        st.image("readiness_score.png", use_container_width=True)
-
-else:
-    st.info("Please upload the client's Technical Documentation to begin the audit.")
-
-# --- 4. THE FOOTER ---
-st.divider()
-st.markdown("Built by **MJ Hall** | Bio-AI Specialist | [LinkedIn](https://www.linkedin.com/profile/view?m_content=profile&utm_medium=ios_app)")
+            if st.button("🔥 RUN NUCLEAR AUDIT"):
+                if query:
+                    with st.spinner("🕵️ Scanning Regulatory Gaps..."):
+                        docs = db.similarity_search(query, k=4)
+                        st.subheader("🕵️ Audit Findings")
+                        for i, doc in enumerate(docs):
+                            source = doc.metadata.get('source', 'Unknown File')
+                            st.info(f"**Evidence {i+1} (Source: {source})**\n\n{doc.page_content}")
+                else:
+                    st.warning("Please enter a probe question first.")
+        except Exception as e:
+            st.error(f"❌ Engine Error: {e}")
