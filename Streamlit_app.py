@@ -2,81 +2,101 @@ import streamlit as st
 import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.chains import RetrievalQA
 
-# 1. Page Configuration
-st.set_page_config(page_title="AI-MedReg Auditor", page_icon="🛡️")
-st.title("🛡️ AI-MedReg Auditor")
-st.markdown("### 2026 EU AI Act & IVDR Compliance Engine")
+# 1. Page & Branding
+st.set_page_config(page_title="AI-MedReg Auditor", page_icon="🛡️", layout="wide")
+st.title("🛡️ AI-MedReg Auditor: Professional Edition")
+st.markdown("### 2026 Compliance Engine | Gap Analysis & Audit Preparation")
 
-# Security Check: Secrets
+# 2. Security Check
 if "HUGGINGFACEHUB_API_TOKEN" not in st.secrets:
-    st.error("🚨 API Token missing! Go to Settings > Secrets and add 'HUGGINGFACEHUB_API_TOKEN'.")
+    st.error("🚨 Configuration Error: API Token missing in Streamlit Secrets.")
     st.stop()
 
-# 2. Setup the Brain
+# 3. Initialize Reasoning Brain
 @st.cache_resource
-def load_embeddings():
-    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+def load_system():
+    # Mistral-7B provides the suggestions and reasoning
+    llm = HuggingFaceEndpoint(
+        repo_id="mistralai/Mistral-7B-Instruct-v0.3",
+        temperature=0.2,
+        huggingfacehub_api_token=st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+    )
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    return llm, embeddings
 
-embeddings = load_embeddings()
+llm, embeddings = load_system()
 
-def build_engine(uploaded_files):
+# 4. Audit Engine Logic
+def run_audit_engine(uploaded_files):
     all_docs = []
+    # Check all possible case variations for your master files
+    master_files = ["EU regulations.pdf", "IVDR.pdf", "ivdr.pdf", "Ivdr.pdf", "ivdr.pdf.pdf"]
     
-    # MASTER REGULATIONS: Checking all possible naming variations to prevent 'File Not Found'
-    possible_names = ["EU regulations.pdf", "IVDR.pdf", "ivdr.pdf", "Ivdr.pdf", "ivdr.pdf.pdf"]
-    
-    for mf in possible_names:
+    for mf in master_files:
         if os.path.exists(mf):
             try:
                 loader = PyPDFLoader(mf)
                 all_docs.extend(loader.load())
-            except Exception:
-                continue
+            except: continue
     
-    # CLIENT DOCUMENTS: Temporary processing
-    for uploaded_file in uploaded_files:
-        temp_name = f"temp_{uploaded_file.name}"
-        with open(temp_name, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+    for f in uploaded_files:
+        temp = f"temp_{f.name}"
+        with open(temp, "wb") as buffer:
+            buffer.write(f.getbuffer())
         try:
-            loader = PyPDFLoader(temp_name)
+            loader = PyPDFLoader(temp)
             all_docs.extend(loader.load())
         finally:
-            if os.path.exists(temp_name):
-                os.remove(temp_name)
+            if os.path.exists(temp): os.remove(temp)
 
-    if not all_docs:
-        raise ValueError("No documents found. Check if the PDFs are in your GitHub folder.")
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+    chunks = splitter.split_documents(all_docs)
+    return FAISS.from_documents(chunks, embeddings)
 
-    # Nuclear Splitting & Indexing
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    chunks = text_splitter.split_documents(all_docs)
-    vector_db = FAISS.from_documents(chunks, embeddings)
-    return vector_db, len(chunks)
-
-# 3. User Interface
-files = st.file_uploader("Upload Tech Files for Audit (PDF)", type="pdf", accept_multiple_files=True)
+# 5. The Interface
+st.sidebar.header("📁 Client Data Ingestion")
+files = st.sidebar.file_uploader("Upload Client Technical File (PDF)", type="pdf", accept_multiple_files=True)
 
 if files:
-    with st.spinner("🔄 Syncing Master Laws + Tech Files..."):
+    with st.spinner("🔄 Building Regulatory Context..."):
         try:
-            db, count = build_engine(files)
-            st.success(f"🚀 Audit Engine Online: {count} data segments indexed.")
+            vector_db = run_audit_engine(files)
+            st.sidebar.success("🚀 Audit Engine Online")
             
-            query = st.text_input("Enter Compliance Probe (e.g. 'Audit Article 10.3 gaps')")
+            st.markdown("---")
+            st.subheader("🕵️ Professional Compliance Probe")
+            query = st.text_area("What would you like to audit?", 
+                                placeholder="e.g., Conduct a gap analysis for Article 10 and suggest specific remediation steps for my tech file.")
             
             if st.button("🔥 RUN NUCLEAR AUDIT"):
                 if query:
-                    with st.spinner("🕵️ Scanning Regulatory Gaps..."):
-                        docs = db.similarity_search(query, k=4)
-                        st.subheader("🕵️ Audit Findings")
-                        for i, doc in enumerate(docs):
-                            source = doc.metadata.get('source', 'Unknown File')
-                            st.info(f"**Evidence {i+1} (Source: {source})**\n\n{doc.page_content}")
+                    with st.spinner("🧠 Analyzing Gaps & Drafting Suggestions..."):
+                        # This chain combines the law with the client file to generate a report
+                        qa_chain = RetrievalQA.from_chain_type(
+                            llm=llm,
+                            chain_type="stuff",
+                            retriever=vector_db.as_retriever(search_kwargs={"k": 5})
+                        )
+                        response = qa_chain.invoke(query)
+                        
+                        st.success("✅ Audit Complete")
+                        
+                        # Part 1: The Suggestions / Gap Analysis
+                        st.markdown("#### 📝 Consultant Report & Remediation Suggestions")
+                        st.write(response["result"])
+                        
+                        # Part 2: The Evidence
+                        with st.expander("📚 View Regulatory Evidence (Raw Data)"):
+                            evidence = vector_db.similarity_search(query, k=3)
+                            for i, d in enumerate(evidence):
+                                st.info(f"**Source: {d.metadata.get('source')}**\n\n{d.page_content}")
                 else:
-                    st.warning("Please enter a probe question first.")
+                    st.warning("Please enter an audit objective.")
         except Exception as e:
             st.error(f"❌ Engine Error: {e}")
+else:
+    st.info("👋 Ready to Audit. Please upload a Technical File in the sidebar to begin.")
