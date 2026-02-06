@@ -35,12 +35,8 @@ if uploaded_files:
             all_docs.extend(loader.load())
             os.remove(uploaded_file.name) # Cleanup
 
-        # Nuclear Splitting & Indexing
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-        chunks = text_splitter.split_documents(all_docs)
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vector_db = FAISS.from_documents(chunks, embeddings)
-        st.success(f"🚀 Audit Engine Online: {len(chunks)} legal segments indexed.")
+        indexed.")
+
 
     # --- 3. THE HIGH-PRECISION AUDIT CONSOLE ---
     st.divider()
