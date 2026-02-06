@@ -1,7 +1,8 @@
 streamlit
-pypdf
-langchain
+langchain-groq
 langchain-community
-langchain-huggingface
+pypdf
+langchain-text-splitters
 faiss-cpu
 sentence-transformers
+langchain-huggingface
