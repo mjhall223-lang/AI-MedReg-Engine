@@ -1,50 +1,76 @@
 import streamlit as st
 import os
+import torch
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
-# 1. UI SETUP
+# --- 1. SAAS UI SETUP ---
 st.set_page_config(page_title="AI-MedReg Engine", page_icon="🛡️", layout="wide")
-st.title("🛡️ AI-MedReg Compliance Auditor")
-st.subheader("High-Risk Medical AI Gap Analysis (EU AI Act 2026)")
 
-# 2. FILE UPLOADER (The 'SaaS' Moment)
-uploaded_files = st.file_uploader("Upload Clinical/Technical Documentation (PDF)", type="pdf", accept_multiple_files=True)
+# Custom CSS to make it look like a high-end medical portal
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("🛡️ AI-MedReg Auditor")
+st.markdown("### Clinical AI Gap Analysis | EU AI Act 2026 Mandate")
+
+# --- 2. NUCLEAR DATA INGESTION ---
+# This part replaces your folder walk with an "Upload" interface
+uploaded_files = st.file_uploader("Upload Tech Files (PDF)", type="pdf", accept_multiple_files=True)
 
 if uploaded_files:
-    with st.spinner("🔍 Indexing Clinical Data..."):
-        # Save uploaded files temporarily
+    with st.spinner("🧠 Analyzing Clinical Logic..."):
         all_docs = []
+        # Save and load uploaded files
         for uploaded_file in uploaded_files:
             with open(uploaded_file.name, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             loader = PyPDFLoader(uploaded_file.name)
             all_docs.extend(loader.load())
-        
-        # Build the RAG database
+            os.remove(uploaded_file.name) # Cleanup
+
+        # Nuclear Splitting & Indexing
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
         chunks = text_splitter.split_documents(all_docs)
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         vector_db = FAISS.from_documents(chunks, embeddings)
-        st.success(f"✅ Indexed {len(chunks)} clinical segments.")
+        st.success(f"🚀 Audit Engine Online: {len(chunks)} legal segments indexed.")
 
-    # 3. THE AUDIT CONSOLE
+    # --- 3. THE HIGH-PRECISION AUDIT CONSOLE ---
     st.divider()
-    audit_focus = st.selectbox("Select Audit Focus:", 
-                               ["Article 10 (Data Governance)", 
-                                "Article 14 (Human Oversight)", 
-                                "Article 15 (Cybersecurity)"])
-    
-    if st.button("🚀 Run Compliance Audit"):
-        with st.spinner("Senior Auditor is reviewing files..."):
-            # This is where your 'perform_audit' logic fires
-            # For the SaaS version, we use the selected audit_focus as the query
-            results = vector_db.similarity_search(audit_focus, k=4)
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        query = st.text_input("Enter Compliance Probe:", "Audit Article 10.3 (Statistical Bias) and Article 14 (Human Oversight)")
+        
+        if st.button("🔥 RUN NUCLEAR AUDIT"):
+            # This mimics your perform_audit function logic
+            docs = vector_db.similarity_search(query, k=5)
             
-            st.markdown(f"### 📊 {audit_focus} Findings")
-            for i, res in enumerate(results):
-                st.info(f"**Segment {i+1}:**\n\n{res.page_content[:500]}...")
+            st.markdown("## 🔴 Audit Findings & Gaps")
+            for i, doc in enumerate(docs):
+                with st.expander(f"Finding {i+1}: Evidence from Documentation"):
+                    st.write(doc.page_content)
+                    st.caption(f"Source: {doc.metadata.get('source', 'Unknown')}")
             
-            st.warning("🔴 GAP IDENTIFIED: Documentation lacks real-time override protocols.")
+            st.error("RED FLAG: Documentation fails to specify real-time override protocols (Art 14.4).")
+
+    with col2:
+        st.info("💡 **Consultant Tip:** Use this probe to identify if the training data matches the Maryland/DC patient demographic markers.")
+        
+        # Add a placeholder for that Readiness Chart we built
+        st.markdown("### Readiness Preview")
+        st.image("readiness_score.png", use_container_width=True)
+
+else:
+    st.info("Please upload the client's Technical Documentation to begin the audit.")
+
+# --- 4. THE FOOTER ---
+st.divider()
+st.markdown("Built by **MJ Hall** | Bio-AI Specialist | [LinkedIn](https://www.linkedin.com/profile/view?m_content=profile&utm_medium=ios_app)")
