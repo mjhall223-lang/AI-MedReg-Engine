@@ -8,54 +8,59 @@ import tempfile
 import os
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Bio-AI Compliance Engine", page_icon="🛡️")
+st.set_page_config(page_title="Bio-AI Compliance Engine", page_icon="🛡️", layout="wide")
 st.title("🛡️ Bio-AI Compliance Engine")
-st.markdown("> **Target:** EU AI Act (August 2026 Mandate)")
+st.subheader("EU AI Act Regulatory Auditor (Articles 10 & 14)")
 
-# --- 1. INITIALIZE BRAIN (Using Secrets) ---
-try:
-    groq_api_key = st.secrets["GROQ_API_KEY"]
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-specdec", api_key=groq_api_key)
-except Exception as e:
-    st.error("Missing GROQ_API_KEY in Streamlit Secrets!")
+# --- 1. THE SECRET CHECKER ---
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("🛑 KEY ERROR: 'GROQ_API_KEY' not found in Streamlit Secrets.")
+    st.info("Please go to App Settings > Secrets and add: GROQ_API_KEY = 'your_key_here'")
     st.stop()
 
-# --- 2. FILE UPLOAD ---
-uploaded_file = st.file_uploader("Upload Clinical Tech Documentation (PDF)", type="pdf")
+# --- 2. INITIALIZE BRAIN ---
+try:
+    llm = ChatGroq(
+        temperature=0.1, 
+        model_name="llama-3.3-70b-versatile", 
+        api_key=st.secrets["GROQ_API_KEY"]
+    )
+except Exception as e:
+    st.error(f"⚠️ LLM CONNECTION ERROR: {e}")
+    st.stop()
+
+# --- 3. FILE UPLOAD ---
+uploaded_file = st.file_uploader("Upload Technical Documentation (PDF)", type="pdf")
 
 if uploaded_file:
-    with st.spinner("Analyzing Documentation..."):
-        # Save to temp file for processing
+    with st.spinner("Analyzing Clinical Data Structure..."):
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
 
-        # Load & Split
         loader = PyPDFLoader(tmp_path)
         docs = loader.load()
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
         chunks = text_splitter.split_documents(docs)
 
-        # Create Vector DB (Fast local embeddings)
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         vector_db = FAISS.from_documents(chunks, embeddings)
         
-        st.success(f"Audit Engine Online: {len(chunks)} segments indexed.")
+        st.success(f"✅ Audit Engine Online: {len(chunks)} clinical segments indexed.")
 
-        # --- 3. AUDIT CONSOLE ---
-        query = st.text_input("Enter Audit Question (e.g., 'Check Article 10.3 compliance')", 
-                             value="Audit this summary against Article 10 bias and Article 14 human oversight.")
+        query = st.text_input(
+            "Enter Audit Focus:", 
+            value="Audit for Article 10.3 (Data bias) and Article 14 (Human oversight)."
+        )
 
         if st.button("Run Audit"):
-            # Retrieval
             search_results = vector_db.similarity_search(query, k=5)
             context = "\n\n".join([d.page_content for d in search_results])
             
-            # Prompting
             prompt = f"""
             SYSTEM: You are a Lead AI Regulatory Auditor for Medical Devices. 
             Ground every answer in Article 10 (Data Governance) and Article 14 (Human Oversight).
-            FORMAT: 🔴 RED (Fail), 🟡 YELLOW (Warning), 🟢 GREEN (Pass).
+            FORMAT: Use 🔴 RED, 🟡 YELLOW, and 🟢 GREEN headers for the report.
 
             CONTEXT:
             {context}
@@ -64,5 +69,13 @@ if uploaded_file:
             """
             
             response = llm.invoke(prompt)
-            st.markdown("### 📋 AUDIT REPORT")
+            st.markdown("---")
+            st.markdown("### 📋 OFFICIAL GAP ANALYSIS REPORT")
             st.write(response.content)
+            
+            # Sidebar Disclaimer (Your "Legal Shield")
+            with st.sidebar:
+                st.markdown("### 🛡️ REGULATORY SHIELD")
+                st.info("This tool provides a gap analysis based on 2026 mandates. It is not legal advice.")
+                st.write(f"**Version:** 1.0.4-Stable")
+                st.write(f"**Specialist:** MJ Hall (Bio-AI)")
