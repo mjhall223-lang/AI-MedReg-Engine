@@ -10,112 +10,130 @@ import re
 
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Bio-AI Compliance Dashboard", page_icon="⚖️", layout="wide")
-
 st.title("⚖️ Bio-AI Compliance & Remediation Engine")
 st.subheader("Official Gap Analysis: EU AI Act & IVDR (2026)")
-st.markdown("---")
 
-# --- 2. SIDEBAR CONFIGURATION ---
+# --- 2. SIDEBAR ---
 with st.sidebar:
     st.markdown("## 🛡️ REGULATORY SHIELD")
     st.markdown("**Lead Specialist:** MJ Hall")
-    st.info("System Status: v1.3.2 - Stable")
-    
-    st.markdown("---")
-    st.markdown("### 💼 SERVICE LEVEL")
-    service_tier = st.radio(
-        "Select Your Analysis Tier:", 
-        ["Standard Gap Analysis", "Premium Remediation (Consulting)"]
-    )
-    
-    if service_tier == "Premium Remediation (Consulting)":
-        st.success("✨ PREMIUM MODE ACTIVE")
-    else:
-        st.warning("Standard Mode Active")
+    service_tier = st.radio("Analysis Tier:", ["Standard Gap Analysis", "Premium Remediation (Consulting)"])
+    st.info("System Status: v1.3.3 - Debug Mode")
 
-# --- 3. THE SECRET CHECKER ---
+# --- 3. INITIALIZE BRAIN ---
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("🛑 KEY ERROR: 'GROQ_API_KEY' not found in Streamlit Secrets.")
+    st.error("🛑 Missing GROQ_API_KEY in Secrets.")
     st.stop()
 
-# --- 4. INITIALIZE BRAIN ---
-try:
-    llm = ChatGroq(
+@st.cache_resource
+def get_llm():
+    return ChatGroq(
         temperature=0, 
         model_name="llama-3.3-70b-versatile", 
         api_key=st.secrets["GROQ_API_KEY"]
     )
-except Exception as e:
-    st.error(f"⚠️ CONNECTION ERROR: {e}")
-    st.stop()
 
-# --- 5. LOAD CORE KNOWLEDGE BASE ---
+llm = get_llm()
+
+# --- 4. LOAD CORE REGS ---
 @st.cache_resource
 def load_base_knowledge():
     all_chunks = []
     base_files = ["EU_regulations.pdf", "Ivdr.pdf"]
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
-
+    
     for file_name in base_files:
         if os.path.exists(file_name):
-            try:
-                loader = PyPDFLoader(file_name)
-                docs = loader.load()
-                all_chunks.extend(text_splitter.split_documents(docs))
-            except Exception as e:
-                st.sidebar.warning(f"Error loading {file_name}: {e}")
-        else:
-            st.sidebar.error(f"❌ Missing Core File: {file_name}")
-    
+            loader = PyPDFLoader(file_name)
+            docs = loader.load()
+            all_chunks.extend(RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200).split_documents(docs))
     return FAISS.from_documents(all_chunks, embeddings) if all_chunks else None
 
-with st.spinner("Syncing 2026 Regulatory Intelligence..."):
-    vector_db = load_base_knowledge()
+vector_db = load_base_knowledge()
 
-# --- 6. EXECUTION ENGINE ---
+# --- 5. EXECUTION ENGINE ---
 uploaded_file = st.file_uploader("Upload Technical Documentation (PDF)", type="pdf")
 
 if uploaded_file and vector_db:
-    with st.spinner("Executing Strict Audit..."):
+    # We use st.status to show progress so the user knows it hasn't "stopped"
+    with st.status("🔍 Processing Document...", expanded=True) as status:
+        st.write("1. Creating temporary workspace...")
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
 
+        st.write("2. Extracting technical evidence...")
         user_loader = PyPDFLoader(tmp_path)
-        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_loader.load())
-        user_text = "\n\n".join([c.page_content for c in user_chunks])
+        user_docs = user_loader.load()
+        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_docs)
         
-        if st.button("🚀 Run Comprehensive Audit"):
-            # A. Retrieve Regulatory Context
-            reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search("Articles 10, 13, 14 requirements", k=5)])
-            
-            # B. THE STRICT AUDITOR PROMPT
-            audit_prompt = f"""
-            SYSTEM: You are a cynical, strict Regulatory Lead Auditor. 
-            Grade strictly against the 2024 EU AI Act (2024/1689) and IVDR (2017/746).
-            
-            GOLD STANDARD (THE LAW): 
-            {reg_context}
+        # Safeguard: Truncate text if it's massive to prevent token crashes
+        user_text = "\n\n".join([c.page_content for c in user_chunks])
+        if len(user_text) > 40000:
+            user_text = user_text[:40000] + "\n\n[TEXT TRUNCATED FOR PERFORMANCE]"
+        
+        st.write("3. Document ready for audit.")
+        status.update(label="✅ Document Indexed", state="complete", expanded=False)
 
-            USER PROVIDED EVIDENCE: 
-            {user_text}
+    if st.button("🚀 Run Comprehensive Audit"):
+        with st.status("⚖️ Executing AI Audit...", expanded=True) as audit_status:
+            try:
+                st.write("Phase A: Retrieving Regulatory Standards...")
+                reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search("Articles 10, 13, 14", k=5)])
+                
+                st.write("Phase B: Analyzing Gaps with Llama-3.3...")
+                audit_prompt = f"""
+                SYSTEM: You are a strict Regulatory Auditor. Grade strictly.
+                LAW: {reg_context}
+                EVIDENCE: {user_text}
+                
+                OUTPUT FORMAT:
+                [ART_10_SCORE]: X
+                [ART_13_SCORE]: X
+                [ART_14_SCORE]: X
+                [IVDR_SCORE]: X
+                [SUMMARY]: Detailed findings...
+                """
+                
+                # Using a try/except specifically for the API call
+                response = llm.invoke(audit_prompt)
+                audit_result = response.content
+                
+                st.write("Phase C: Parsing Scores...")
+                def parse_score(tag):
+                    pattern = rf"\[{tag}_SCORE\]: (\d+)"
+                    match = re.search(pattern, audit_result)
+                    return int(match.group(1)) if match else 0
 
-            SCORING (0-10): 
-            - Give a 0 if the evidence is unrelated to medical devices (e.g. budgets).
-            - Give a 10 only if the evidence explicitly meets the law requirements.
+                s10, s13, s14, sivdr = parse_score("ART_10"), parse_score("ART_13"), parse_score("ART_14"), parse_score("IVDR")
+
+                # DISPLAY RESULTS
+                st.markdown("### 🏆 COMPLIANCE SCORECARD")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Art 10", f"{s10}/10")
+                m2.metric("Art 13", f"{s13}/10")
+                m3.metric("Art 14", f"{s14}/10")
+                m4.metric("IVDR", f"{sivdr}/10")
+
+                st.markdown("---")
+                st.markdown("### 📋 AUDITOR'S FINDINGS")
+                summary = audit_result.split("[SUMMARY]:")[-1]
+                st.error(summary) if s10 < 5 else st.success(summary)
+
+                if service_tier == "Premium Remediation (Consulting)":
+                    st.write("Phase D: Generating Strategic Roadmap...")
+                    consultant_prompt = f"As a consultant, provide a 24-week roadmap to fix: {summary}"
+                    roadmap = llm.invoke(consultant_prompt).content
+                    st.markdown("---")
+                    st.markdown("### ✨ PREMIUM: REMEDIATION STRATEGY")
+                    st.write(roadmap)
+
+                audit_status.update(label="✅ Audit Complete", state="complete")
+
+            except Exception as e:
+                st.error(f"⚠️ Audit Failed: {e}")
+                audit_status.update(label="❌ Audit Failed", state="error")
             
-            OUTPUT FORMAT:
-            [ART_10_SCORE]: X
-            [ART_13_SCORE]: X
-            [ART_14_SCORE]: X
-            [IVDR_SCORE]: X
-            [SUMMARY]: Start with PASS or FAIL. List exact missing technical requirements.
-            """
-            
-            audit_result = llm.invoke(audit_prompt).content
-            
-            # C. Score Parser (Python 3.13 Fix)
-            def parse_score(tag):
-                pattern = rf"\[{tag}_SCORE\]: (\d+)"
-                match
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
