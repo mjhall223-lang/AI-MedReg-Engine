@@ -10,12 +10,11 @@ import os
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Bio-AI Compliance Engine", page_icon="🛡️", layout="wide")
 st.title("🛡️ Bio-AI Compliance Engine")
-st.subheader("EU AI Act Regulatory Auditor (Articles 10 & 14)")
+st.subheader("EU AI Act & IVDR Regulatory Auditor")
 
 # --- 1. THE SECRET CHECKER ---
 if "GROQ_API_KEY" not in st.secrets:
     st.error("🛑 KEY ERROR: 'GROQ_API_KEY' not found in Streamlit Secrets.")
-    st.info("Please go to App Settings > Secrets and add: GROQ_API_KEY = 'your_key_here'")
     st.stop()
 
 # --- 2. INITIALIZE BRAIN ---
@@ -29,53 +28,92 @@ except Exception as e:
     st.error(f"⚠️ LLM CONNECTION ERROR: {e}")
     st.stop()
 
-# --- 3. FILE UPLOAD ---
-uploaded_file = st.file_uploader("Upload Technical Documentation (PDF)", type="pdf")
+# --- 3. LOAD CORE REGULATIONS (Pre-set Files) ---
+@st.cache_resource
+def load_base_knowledge():
+    all_chunks = []
+    # Verbatim names from your GitHub repository
+    base_files = ["EU regulations.pdf", "Ivdr.pdf"]
+    
+    loader_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
 
-if uploaded_file:
-    with st.spinner("Analyzing Clinical Data Structure..."):
+    for file_name in base_files:
+        if os.path.exists(file_name):
+            try:
+                loader = PyPDFLoader(file_name)
+                docs = loader.load()
+                all_chunks.extend(text_splitter.split_documents(docs))
+            except Exception as e:
+                st.warning(f"Could not load {file_name}: {e}")
+        else:
+            st.error(f"Missing Core File: {file_name} not found in repository.")
+            
+    if not all_chunks:
+        return None
+        
+    return FAISS.from_documents(all_chunks, loader_embeddings)
+
+# Initialize the Regulation Knowledge Base
+with st.spinner("Synchronizing 2026 EU Regulations..."):
+    vector_db = load_base_knowledge()
+    if vector_db:
+        st.sidebar.success("✅ Base Regulations Loaded")
+
+# --- 4. USER DOCUMENT UPLOAD & ANALYSIS ---
+uploaded_file = st.file_uploader("Upload YOUR Device Technical Documentation", type="pdf")
+
+if uploaded_file and vector_db:
+    with st.spinner("Merging Documentation with Regulatory Context..."):
+        # Save upload to temp file
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
 
-        loader = PyPDFLoader(tmp_path)
-        docs = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-        chunks = text_splitter.split_documents(docs)
+        # Load and chunk user doc
+        user_loader = PyPDFLoader(tmp_path)
+        user_docs = user_loader.load()
+        user_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+        user_chunks = user_splitter.split_documents(user_docs)
 
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vector_db = FAISS.from_documents(chunks, embeddings)
+        # Merge user chunks into our existing Regulation Vector DB
+        vector_db.add_documents(user_chunks)
         
-        st.success(f"✅ Audit Engine Online: {len(chunks)} clinical segments indexed.")
+        st.success(f"✅ Ready: {len(user_chunks)} user segments added to analysis engine.")
 
         query = st.text_input(
             "Enter Audit Focus:", 
-            value="Audit for Article 10.3 (Data bias) and Article 14 (Human oversight)."
+            value="Perform a gap analysis between this device and EU AI Act Article 10/14 and IVDR transition requirements."
         )
 
         if st.button("Run Audit"):
-            search_results = vector_db.similarity_search(query, k=5)
-            context = "\n\n".join([d.page_content for d in search_results])
-            
-            prompt = f"""
-            SYSTEM: You are a Lead AI Regulatory Auditor for Medical Devices. 
-            Ground every answer in Article 10 (Data Governance) and Article 14 (Human Oversight).
-            FORMAT: Use 🔴 RED, 🟡 YELLOW, and 🟢 GREEN headers for the report.
+            with st.spinner("Analyzing Gaps..."):
+                search_results = vector_db.similarity_search(query, k=7)
+                context = "\n\n".join([d.page_content for d in search_results])
+                
+                prompt = f"""
+                SYSTEM: You are a Lead AI Regulatory Auditor for Medical Devices (Bio-AI). 
+                Compare the provided CONTEXT (User Doc + Regulations) to identify gaps.
+                Highlight where the user's device fails to meet Article 10 (Data) and Article 14 (Human Oversight).
+                FORMAT: Use 🔴 RED (Critical Gap), 🟡 YELLOW (Warning), and 🟢 GREEN (Compliant) headers.
 
-            CONTEXT:
-            {context}
+                CONTEXT:
+                {context}
 
-            QUESTION: {query}
-            """
-            
-            response = llm.invoke(prompt)
-            st.markdown("---")
-            st.markdown("### 📋 OFFICIAL GAP ANALYSIS REPORT")
-            st.write(response.content)
-            
-            # Sidebar Disclaimer (Your "Legal Shield")
-            with st.sidebar:
-                st.markdown("### 🛡️ REGULATORY SHIELD")
-                st.info("This tool provides a gap analysis based on 2026 mandates. It is not legal advice.")
-                st.write(f"**Version:** 1.0.4-Stable")
-                st.write(f"**Specialist:** MJ Hall (Bio-AI)")
+                QUESTION: {query}
+                """
+                
+                response = llm.invoke(prompt)
+                st.markdown("---")
+                st.markdown("### 📋 OFFICIAL GAP ANALYSIS REPORT")
+                st.write(response.content)
+                
+                # Clean up temp file
+                os.remove(tmp_path)
+
+# Sidebar Info
+with st.sidebar:
+    st.markdown("### 🛡️ REGULATORY SHIELD")
+    st.info("Version: 1.0.4-Stable (2026 Compliance Update)")
+    st.write("**Core Regs:** EU AI Act, IVDR")
+    st.write("**Specialist:** MJ Hall")
