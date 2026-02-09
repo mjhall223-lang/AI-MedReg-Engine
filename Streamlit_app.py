@@ -8,11 +8,9 @@ import tempfile
 import os
 import re
 
-# --- 1. PAGE SETUP & BRANDING ---
+# --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Bio-AI Compliance Dashboard", page_icon="⚖️", layout="wide")
 
-# Main Header Branding
-st.markdown("### 🏹 A Chesapeake Native Foundation Initiative")
 st.title("⚖️ Bio-AI Compliance & Remediation Engine")
 st.subheader("Official Gap Analysis: EU AI Act & IVDR (2026)")
 st.markdown("---")
@@ -21,21 +19,19 @@ st.markdown("---")
 with st.sidebar:
     st.markdown("## 🛡️ REGULATORY SHIELD")
     st.markdown("**Lead Specialist:** MJ Hall")
-    st.markdown("**Affiliation:** Piscataway Tribe / Chesapeake Native Foundation")
-    st.info("System Status: v1.3.1 - Production Stable")
+    st.info("System Status: v1.3.2 - Stable")
     
     st.markdown("---")
     st.markdown("### 💼 SERVICE LEVEL")
-    # This radio button controls the upsell logic
     service_tier = st.radio(
         "Select Your Analysis Tier:", 
         ["Standard Gap Analysis", "Premium Remediation (Consulting)"]
     )
     
     if service_tier == "Premium Remediation (Consulting)":
-        st.success("✨ PREMIUM MODE ACTIVE: Strategic Roadmap Enabled.")
+        st.success("✨ PREMIUM MODE ACTIVE")
     else:
-        st.warning("Standard Mode: Remediation advice disabled.")
+        st.warning("Standard Mode Active")
 
 # --- 3. THE SECRET CHECKER ---
 if "GROQ_API_KEY" not in st.secrets:
@@ -45,7 +41,7 @@ if "GROQ_API_KEY" not in st.secrets:
 # --- 4. INITIALIZE BRAIN ---
 try:
     llm = ChatGroq(
-        temperature=0, # Maximum strictness for auditing
+        temperature=0, 
         model_name="llama-3.3-70b-versatile", 
         api_key=st.secrets["GROQ_API_KEY"]
     )
@@ -57,7 +53,6 @@ except Exception as e:
 @st.cache_resource
 def load_base_knowledge():
     all_chunks = []
-    # These must match your GitHub files exactly
     base_files = ["EU_regulations.pdf", "Ivdr.pdf"]
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
@@ -77,27 +72,22 @@ def load_base_knowledge():
 
 with st.spinner("Syncing 2026 Regulatory Intelligence..."):
     vector_db = load_base_knowledge()
-    if vector_db:
-        st.sidebar.success("✅ EU/IVDR Regulations Synced")
 
 # --- 6. EXECUTION ENGINE ---
-uploaded_file = st.file_uploader("Upload YOUR Device Technical Documentation (PDF)", type="pdf")
+uploaded_file = st.file_uploader("Upload Technical Documentation (PDF)", type="pdf")
 
 if uploaded_file and vector_db:
     with st.spinner("Executing Strict Audit..."):
-        # Save upload to temp
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
 
-        # Load and chunk user doc
         user_loader = PyPDFLoader(tmp_path)
-        user_docs = user_loader.load()
-        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_docs)
+        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_loader.load())
         user_text = "\n\n".join([c.page_content for c in user_chunks])
         
         if st.button("🚀 Run Comprehensive Audit"):
-            # A. Retrieve Regulatory Context (Top 5 matches for key articles)
+            # A. Retrieve Regulatory Context
             reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search("Articles 10, 13, 14 requirements", k=5)])
             
             # B. THE STRICT AUDITOR PROMPT
@@ -112,7 +102,7 @@ if uploaded_file and vector_db:
             {user_text}
 
             SCORING (0-10): 
-            - Give a 0 if the evidence is unrelated to medical devices (e.g. budgets or general text).
+            - Give a 0 if the evidence is unrelated to medical devices (e.g. budgets).
             - Give a 10 only if the evidence explicitly meets the law requirements.
             
             OUTPUT FORMAT:
@@ -128,49 +118,4 @@ if uploaded_file and vector_db:
             # C. Score Parser (Python 3.13 Fix)
             def parse_score(tag):
                 pattern = rf"\[{tag}_SCORE\]: (\d+)"
-                match = re.search(pattern, audit_result)
-                return int(match.group(1)) if match else 0
-
-            s10 = parse_score("ART_10")
-            s13 = parse_score("ART_13")
-            s14 = parse_score("ART_14")
-            sivdr = parse_score("IVDR")
-
-            # --- DISPLAY DASHBOARD ---
-            st.markdown("### 🏆 COMPLIANCE SCORECARD")
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Art 10: Data", f"{s10}/10", delta="High Risk" if s10 < 5 else None)
-            m2.metric("Art 13: Transp.", f"{s13}/10")
-            m3.metric("Art 14: Oversight", f"{s14}/10")
-            m4.metric("IVDR Status", f"{sivdr}/10")
-
-            st.markdown("---")
-            st.markdown("### 📋 AUDITOR'S FINDINGS")
-            summary = audit_result.split("[SUMMARY]:")[-1]
-            if "FAIL" in summary:
-                st.error(summary)
-            else:
-                st.success(summary)
-
-            # D. PREMIUM REMEDIATION ROADMAP
-            if service_tier == "Premium Remediation (Consulting)":
-                st.markdown("---")
-                st.markdown("### ✨ PREMIUM: STRATEGIC REMEDIATION ROADMAP")
-                
-                consultant_prompt = f"""
-                SYSTEM: You are a high-priced Bio-AI Regulatory Consultant (MJ Hall). 
-                Based on these FAILURES: {summary}
-                
-                STRICT RULE: Reference only the EU AI Act (2024/1689) and IVDR (2017/746).
-                
-                Provide a 24-week Strategic Roadmap to achieve 10/10 compliance.
-                Include specific technical documentation requirements and Article 14 testing protocols.
-                """
-                
-                with st.spinner("Generating Strategic Roadmap..."):
-                    suggestions = llm.invoke(consultant_prompt).content
-                    st.write(suggestions)
-                    st.info(f"💡 Ready to implement this strategy? Contact MJ Hall via the Chesapeake Native Foundation.")
-            
-            # Clean up temp file
-            os.remove(tmp_path)
+                match
