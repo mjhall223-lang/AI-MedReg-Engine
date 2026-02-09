@@ -15,13 +15,13 @@ st.subheader("Executive Gap Analysis vs. EU AI Act & IVDR (2026)")
 
 # --- 1. THE SECRET CHECKER ---
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("🛑 KEY ERROR: 'GROQ_API_KEY' not found in Secrets.")
+    st.error("🛑 KEY ERROR: 'GROQ_API_KEY' not found in Streamlit Secrets.")
     st.stop()
 
 # --- 2. INITIALIZE BRAIN ---
 try:
     llm = ChatGroq(
-        temperature=0, # Absolute precision for auditing
+        temperature=0, 
         model_name="llama-3.3-70b-versatile", 
         api_key=st.secrets["GROQ_API_KEY"]
     )
@@ -33,6 +33,7 @@ except Exception as e:
 @st.cache_resource
 def load_base_knowledge():
     all_chunks = []
+    # Ensure these names match your GitHub files exactly
     base_files = ["EU_regulations.pdf", "Ivdr.pdf"]
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
@@ -46,6 +47,7 @@ def load_base_knowledge():
                 st.sidebar.warning(f"Error loading {file_name}: {e}")
         else:
             st.sidebar.error(f"❌ Missing: {file_name}")
+    
     return FAISS.from_documents(all_chunks, embeddings) if all_chunks else None
 
 with st.spinner("Syncing 2026 Regulatory Intelligence..."):
@@ -92,18 +94,22 @@ if uploaded_file and vector_db:
             {context}
             """
             
-            result = llm.invoke(audit_prompt).content
+            result_text = llm.invoke(audit_prompt).content
             
-            # Extract scores with Regex
+            # --- FIXED PARSER FOR PYTHON 3.13 ---
             def parse_score(tag):
-                match = re.search(f"\\{tag}\\]: (\\d+)", result)
+                # Using a raw f-string (rf"") to avoid PatternError: bad escape
+                pattern = rf"\[{tag}_SCORE\]: (\d+)"
+                match = re.search(pattern, result_text)
                 return int(match.group(1)) if match else 0
 
-            s10, s13, s14, sivdr = parse_score("ART_10"), parse_score("ART_13"), parse_score("ART_14"), parse_score("IVDR")
+            s10 = parse_score("ART_10")
+            s13 = parse_score("ART_13")
+            s14 = parse_score("ART_14")
+            sivdr = parse_score("IVDR")
 
             # --- DISPLAY DASHBOARD ---
             st.markdown("### 🏆 COMPLIANCE SCORECARD")
-            
             m1, m2, m3, m4 = st.columns(4)
             
             m1.metric("Art 10: Data", f"{s10}/10", delta="Warning" if s10 < 7 else "Passed", delta_color="inverse" if s10 < 7 else "normal")
@@ -113,8 +119,13 @@ if uploaded_file and vector_db:
 
             st.markdown("---")
             st.markdown("### 📋 AUDITOR'S DETAILED FINDINGS")
-            summary = result.split("[SUMMARY]:")[-1]
-            st.markdown(summary)
+            
+            # Extract the summary portion
+            if "[SUMMARY]:" in result_text:
+                summary = result_text.split("[SUMMARY]:")[-1]
+                st.markdown(summary)
+            else:
+                st.write(result_text)
             
             os.remove(tmp_path)
 
@@ -122,4 +133,4 @@ if uploaded_file and vector_db:
 with st.sidebar:
     st.markdown("### 🛡️ REGULATORY SHIELD")
     st.info("Ver: 1.1.0 (Scorecard Edition)")
-    st.write("**Specialist:** MJ Hall (Bio-AI)")
+    st.write(f"**Specialist:** MJ Hall")
