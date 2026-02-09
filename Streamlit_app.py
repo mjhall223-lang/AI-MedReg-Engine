@@ -28,14 +28,14 @@ except Exception as e:
     st.error(f"⚠️ LLM CONNECTION ERROR: {e}")
     st.stop()
 
-# --- 3. LOAD CORE REGULATIONS (Pre-set Files) ---
+# --- 3. LOAD CORE REGULATIONS ---
 @st.cache_resource
 def load_base_knowledge():
     all_chunks = []
-    # Verbatim names from your GitHub repository
-    base_files = ["EU regulations.pdf", "Ivdr.pdf"]
+    # VERBATIM NAMES: Ensure these match your GitHub exactly
+    base_files = ["EU_regulations.pdf", "Ivdr.pdf"]
     
-    loader_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
 
     for file_name in base_files:
@@ -45,75 +45,67 @@ def load_base_knowledge():
                 docs = loader.load()
                 all_chunks.extend(text_splitter.split_documents(docs))
             except Exception as e:
-                st.warning(f"Could not load {file_name}: {e}")
+                st.sidebar.warning(f"Error reading {file_name}: {e}")
         else:
-            st.error(f"Missing Core File: {file_name} not found in repository.")
+            st.sidebar.error(f"❌ File Not Found: {file_name}")
             
     if not all_chunks:
         return None
         
-    return FAISS.from_documents(all_chunks, loader_embeddings)
+    return FAISS.from_documents(all_chunks, embeddings)
 
-# Initialize the Regulation Knowledge Base
-with st.spinner("Synchronizing 2026 EU Regulations..."):
+# Sync Knowledge Base
+with st.spinner("Synchronizing 2026 EU/IVDR Regulations..."):
     vector_db = load_base_knowledge()
     if vector_db:
-        st.sidebar.success("✅ Base Regulations Loaded")
+        st.sidebar.success("✅ Knowledge Base Online")
 
-# --- 4. USER DOCUMENT UPLOAD & ANALYSIS ---
+# --- 4. USER DOC UPLOAD ---
+st.markdown("---")
 uploaded_file = st.file_uploader("Upload YOUR Device Technical Documentation", type="pdf")
 
 if uploaded_file and vector_db:
-    with st.spinner("Merging Documentation with Regulatory Context..."):
-        # Save upload to temp file
+    with st.spinner("Analyzing Gaps..."):
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
 
-        # Load and chunk user doc
         user_loader = PyPDFLoader(tmp_path)
-        user_docs = user_loader.load()
-        user_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-        user_chunks = user_splitter.split_documents(user_docs)
+        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_loader.load())
 
-        # Merge user chunks into our existing Regulation Vector DB
+        # Merge user docs into the regulatory knowledge base
         vector_db.add_documents(user_chunks)
         
-        st.success(f"✅ Ready: {len(user_chunks)} user segments added to analysis engine.")
+        st.success(f"✅ Comparison Engine Ready. Processing {len(user_chunks)} segments.")
 
         query = st.text_input(
             "Enter Audit Focus:", 
-            value="Perform a gap analysis between this device and EU AI Act Article 10/14 and IVDR transition requirements."
+            value="Perform a gap analysis between this device and EU AI Act Articles 10 & 14 and IVDR transition requirements."
         )
 
         if st.button("Run Audit"):
-            with st.spinner("Analyzing Gaps..."):
-                search_results = vector_db.similarity_search(query, k=7)
-                context = "\n\n".join([d.page_content for d in search_results])
-                
-                prompt = f"""
-                SYSTEM: You are a Lead AI Regulatory Auditor for Medical Devices (Bio-AI). 
-                Compare the provided CONTEXT (User Doc + Regulations) to identify gaps.
-                Highlight where the user's device fails to meet Article 10 (Data) and Article 14 (Human Oversight).
-                FORMAT: Use 🔴 RED (Critical Gap), 🟡 YELLOW (Warning), and 🟢 GREEN (Compliant) headers.
+            search_results = vector_db.similarity_search(query, k=8)
+            context = "\n\n".join([d.page_content for d in search_results])
+            
+            prompt = f"""
+            SYSTEM: You are a Lead AI Regulatory Auditor for Medical Devices. 
+            Identify critical gaps between the CONTEXT (User Doc + Regs) and 2026 mandates.
+            Highlight specific failures regarding Article 10 and Article 14.
+            FORMAT: Use 🔴 RED, 🟡 YELLOW, and 🟢 GREEN headers.
 
-                CONTEXT:
-                {context}
+            CONTEXT:
+            {context}
 
-                QUESTION: {query}
-                """
-                
-                response = llm.invoke(prompt)
-                st.markdown("---")
-                st.markdown("### 📋 OFFICIAL GAP ANALYSIS REPORT")
-                st.write(response.content)
-                
-                # Clean up temp file
-                os.remove(tmp_path)
+            QUESTION: {query}
+            """
+            
+            response = llm.invoke(prompt)
+            st.markdown("---")
+            st.markdown("### 📋 OFFICIAL GAP ANALYSIS REPORT")
+            st.write(response.content)
+            os.remove(tmp_path)
 
-# Sidebar Info
 with st.sidebar:
     st.markdown("### 🛡️ REGULATORY SHIELD")
-    st.info("Version: 1.0.4-Stable (2026 Compliance Update)")
-    st.write("**Core Regs:** EU AI Act, IVDR")
-    st.write("**Specialist:** MJ Hall")
+    st.info("Version: 1.0.5-Stable")
+    st.write("**Specialist:** MJ Hall (Bio-AI)")
