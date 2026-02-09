@@ -1,0 +1,17 @@
+[server]
+# Prevents the "Internal Server Error" during heavy PDF processing
+maxUploadSize = 100
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+# Stops background tracking that can sometimes hang the session
+gatherUsageStats = false
+
+[theme]
+# (Optional) Professional Bio-AI look
+primaryColor = "#d33682"
+backgroundColor = "#002b36"
+secondaryBackgroundColor = "#073642"
+textColor = "#839496"
+font = "sans serif"
