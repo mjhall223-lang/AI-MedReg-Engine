@@ -6,3 +6,4 @@ langchain-text-splitters
 faiss-cpu
 sentence-transformers
 langchain-huggingface
+pandas
