@@ -32,19 +32,15 @@ except Exception as e:
 # --- 3. SIDEBAR: TIERED SERVICE LEVEL ---
 with st.sidebar:
     st.markdown("### 🛡️ REGULATORY SHIELD")
-    st.info("Version: 1.2.5 (Premium Edition)")
-    
+    st.info("Version: 1.2.6 (Premium Edition)")
     st.markdown("---")
     st.markdown("### 💼 SERVICE LEVEL")
-    # This is your business logic toggle
     service_tier = st.radio(
         "Select Analysis Level:", 
         ["Standard Gap Analysis", "Premium Remediation (Consulting)"]
     )
-    
     if service_tier == "Premium Remediation (Consulting)":
-        st.success("✨ Premium Mode: Strategic Roadmap Enabled")
-    
+        st.success("✨ Premium Mode Enabled")
     st.markdown("---")
     st.write(f"**Specialist:** MJ Hall")
     st.write(f"**Affiliation:** Bio-AI Compliance")
@@ -66,7 +62,6 @@ def load_base_knowledge():
                 st.sidebar.warning(f"Error loading {file_name}: {e}")
         else:
             st.sidebar.error(f"❌ Missing: {file_name}")
-    
     return FAISS.from_documents(all_chunks, embeddings) if all_chunks else None
 
 with st.spinner("Syncing Regulatory Intelligence..."):
@@ -82,14 +77,78 @@ if uploaded_file and vector_db:
             tmp_path = tmp_file.name
 
         user_loader = PyPDFLoader(tmp_path)
-        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_loader.load())
-        
-        # Capture user evidence separately for strict evaluation
+        user_docs = user_loader.load()
+        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_docs)
         user_text = "\n\n".join([c.page_content for c in user_chunks])
         
         if st.button("🚀 Run Comprehensive Audit"):
             # A. Retrieve Regulatory Context
             reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search("Articles 10, 13, 14 requirements", k=5)])
             
-            # B. The Strict Auditor Prompt (The "What is wrong")
-            audit_prompt = f
+            # B. The Strict Auditor Prompt
+            audit_prompt = f"""
+            SYSTEM: You are a cynical, strict Regulatory Lead Auditor. 
+            Grade the device based ONLY on the provided evidence.
+            
+            GOLD STANDARD (LAW):
+            {reg_context}
+
+            USER EVIDENCE (THE DOCUMENT):
+            {user_text}
+
+            SCORING (0-10):
+            If the evidence is unrelated to medical devices, give 0.
+            
+            OUTPUT FORMAT:
+            [ART_10_SCORE]: X
+            [ART_13_SCORE]: X
+            [ART_14_SCORE]: X
+            [IVDR_SCORE]: X
+            [SUMMARY]: Start with PASS or FAIL. List exact missing technical requirements.
+            """
+            
+            audit_result = llm.invoke(audit_prompt).content
+            
+            # C. Parsing Scores
+            def parse_score(tag):
+                pattern = rf"\[{tag}_SCORE\]: (\d+)"
+                match = re.search(pattern, audit_result)
+                return int(match.group(1)) if match else 0
+
+            s10, s13, s14, sivdr = parse_score("ART_10"), parse_score("ART_13"), parse_score("ART_14"), parse_score("IVDR")
+
+            # --- DISPLAY DASHBOARD ---
+            st.markdown("### 🏆 COMPLIANCE SCORECARD")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Art 10: Data", f"{s10}/10")
+            m2.metric("Art 13: Transp.", f"{s13}/10")
+            m3.metric("Art 14: Oversight", f"{s14}/10")
+            m4.metric("IVDR Status", f"{sivdr}/10")
+
+            st.markdown("---")
+            st.markdown("### 📋 AUDITOR'S FINDINGS")
+            summary = audit_result.split("[SUMMARY]:")[-1]
+            if "FAIL" in summary:
+                st.error(summary)
+            else:
+                st.success(summary)
+
+            # D. The Consultant Prompt (PREMIUM ONLY)
+            if service_tier == "Premium Remediation (Consulting)":
+                st.markdown("---")
+                st.markdown("### ✨ PREMIUM: STRATEGIC REMEDIATION ROADMAP")
+                
+                
+                consultant_prompt = f"""
+                SYSTEM: You are a high-priced Bio-AI Regulatory Consultant. 
+                Based on these FAILURES: {summary}
+                Provide a strategic roadmap to reach 10/10 compliance.
+                Include technical documentation requirements and Article 14 testing protocols.
+                """
+                
+                with st.spinner("Generating Strategic Roadmap..."):
+                    suggestions = llm.invoke(consultant_prompt).content
+                    st.write(suggestions)
+                    st.info("💡 Want MJ Hall to implement this strategy? Contact for partnership.")
+            
+            os.remove(tmp_path)
