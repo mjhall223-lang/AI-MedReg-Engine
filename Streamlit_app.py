@@ -9,128 +9,98 @@ import os
 import re
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Bio-AI Compliance Scorecard", page_icon="📊", layout="wide")
-st.title("📊 Bio-AI Compliance Scorecard")
-st.subheader("Executive Gap Analysis vs. EU AI Act & IVDR (2026)")
+st.set_page_config(page_title="Bio-AI Strict Auditor", page_icon="⚖️", layout="wide")
+st.title("⚖️ Bio-AI Strict Compliance Auditor")
+st.subheader("No-Nonsense Gap Analysis (v1.2.0)")
 
-# --- 1. THE SECRET CHECKER ---
+# --- 1. INITIALIZE ---
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("🛑 KEY ERROR: 'GROQ_API_KEY' not found in Streamlit Secrets.")
+    st.error("🛑 Missing GROQ_API_KEY")
     st.stop()
 
-# --- 2. INITIALIZE BRAIN ---
 try:
     llm = ChatGroq(
-        temperature=0, 
+        temperature=0, # Maximum strictness
         model_name="llama-3.3-70b-versatile", 
         api_key=st.secrets["GROQ_API_KEY"]
     )
 except Exception as e:
-    st.error(f"⚠️ CONNECTION ERROR: {e}")
+    st.error(f"⚠️ Error: {e}")
     st.stop()
 
-# --- 3. LOAD CORE KNOWLEDGE BASE ---
+# --- 2. LOAD REGS ---
 @st.cache_resource
-def load_base_knowledge():
+def load_base_regs():
     all_chunks = []
-    # Ensure these names match your GitHub files exactly
     base_files = ["EU_regulations.pdf", "Ivdr.pdf"]
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
-
-    for file_name in base_files:
-        if os.path.exists(file_name):
-            try:
-                loader = PyPDFLoader(file_name)
-                all_chunks.extend(text_splitter.split_documents(loader.load()))
-            except Exception as e:
-                st.sidebar.warning(f"Error loading {file_name}: {e}")
-        else:
-            st.sidebar.error(f"❌ Missing: {file_name}")
     
+    for f in base_files:
+        if os.path.exists(f):
+            loader = PyPDFLoader(f)
+            all_chunks.extend(RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100).split_documents(loader.load()))
     return FAISS.from_documents(all_chunks, embeddings) if all_chunks else None
 
-with st.spinner("Syncing 2026 Regulatory Intelligence..."):
-    vector_db = load_base_knowledge()
-    if vector_db:
-        st.sidebar.success("✅ Knowledge Base Online")
+vector_db = load_base_regs()
 
-# --- 4. SCORECARD ENGINE ---
-uploaded_file = st.file_uploader("Upload YOUR Device Technical Documentation", type="pdf")
+# --- 3. AUDIT ENGINE ---
+uploaded_file = st.file_uploader("Upload Device Technical Documentation", type="pdf")
 
 if uploaded_file and vector_db:
-    with st.spinner("Executing Audit..."):
+    with st.spinner("Analyzing Evidence..."):
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
 
         user_loader = PyPDFLoader(tmp_path)
-        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_loader.load())
-        vector_db.add_documents(user_chunks)
+        user_chunks = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=50).split_documents(user_loader.load())
         
-        st.info("💡 Files Merged. Ready for Scoring.")
+        # We store the user chunks separately to tell the AI what is "Evidence"
+        user_text = "\n\n".join([c.page_content for c in user_chunks])
+        
+        if st.button("🚀 Run Strict Audit"):
+            # Search regs for context
+            reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search("Articles 10, 13, 14 requirements", k=5)])
 
-        if st.button("🚀 Run Full Compliance Audit"):
-            # Retrieval of context (User Doc + Regulations)
-            query = "Evaluate Data Governance (Art 10), Transparency (Art 13), Human Oversight (Art 14), and IVDR Transition Requirements."
-            search_results = vector_db.similarity_search(query, k=10)
-            context = "\n\n".join([d.page_content for d in search_results])
+            # --- THE STRICT AUDITOR PROMPT ---
+            strict_prompt = f"""
+            SYSTEM: You are a cynical, strict Regulatory Lead Auditor. 
+            Your goal is to find reasons to FAIL this device.
             
-            # The Auditor Prompt
-            audit_prompt = f"""
-            SYSTEM: You are a Lead Regulatory Auditor. You must score the device based ON THE PROVIDED CONTEXT.
-            
-            SCORING (0-10):
-            0-3: Critical/Missing | 4-7: Incomplete | 8-10: Compliant
-            
-            OUTPUT FORMAT (MANDATORY):
+            GOLD STANDARD (THE LAW):
+            {reg_context}
+
+            USER PROVIDED EVIDENCE (THE DOCUMENT):
+            {user_text}
+
+            INSTRUCTIONS:
+            1. Only use the "USER PROVIDED EVIDENCE" to judge compliance. 
+            2. If the user evidence is unrelated to medical devices (e.g., a budget, a grocery list, or general business info), you MUST give a score of 0 for all categories.
+            3. Do NOT summarize the law. Only identify what is MISSING from the user evidence.
+            4. Be extremely harsh. "Maybe" or "Implied" = 0.
+
+            OUTPUT FORMAT:
             [ART_10_SCORE]: X
             [ART_13_SCORE]: X
             [ART_14_SCORE]: X
             [IVDR_SCORE]: X
-            [SUMMARY]: Detailed audit report...
-
-            CONTEXT:
-            {context}
+            [SUMMARY]: Start with "PASS" or "FAIL". List exact missing technical requirements.
             """
-            
-            result_text = llm.invoke(audit_prompt).content
-            
-            # --- FIXED PARSER FOR PYTHON 3.13 ---
-            def parse_score(tag):
-                # Using a raw f-string (rf"") to avoid PatternError: bad escape
-                pattern = rf"\[{tag}_SCORE\]: (\d+)"
-                match = re.search(pattern, result_text)
-                return int(match.group(1)) if match else 0
 
-            s10 = parse_score("ART_10")
-            s13 = parse_score("ART_13")
-            s14 = parse_score("ART_14")
-            sivdr = parse_score("IVDR")
+            result = llm.invoke(strict_prompt).content
+            
+            # Parsing and Display
+            scores = re.findall(r"SCORE\]: (\d+)", result)
+            s10, s13, s14, sivdr = scores if len(scores) == 4 else [0,0,0,0]
 
-            # --- DISPLAY DASHBOARD ---
             st.markdown("### 🏆 COMPLIANCE SCORECARD")
-            m1, m2, m3, m4 = st.columns(4)
-            
-            m1.metric("Art 10: Data", f"{s10}/10", delta="Warning" if s10 < 7 else "Passed", delta_color="inverse" if s10 < 7 else "normal")
-            m2.metric("Art 13: Transp.", f"{s13}/10")
-            m3.metric("Art 14: Oversight", f"{s14}/10")
-            m4.metric("IVDR Status", f"{sivdr}/10")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Art 10", f"{s10}/10")
+            c2.metric("Art 13", f"{s13}/10")
+            c3.metric("Art 14", f"{s14}/10")
+            c4.metric("IVDR", f"{sivdr}/10")
 
             st.markdown("---")
-            st.markdown("### 📋 AUDITOR'S DETAILED FINDINGS")
-            
-            # Extract the summary portion
-            if "[SUMMARY]:" in result_text:
-                summary = result_text.split("[SUMMARY]:")[-1]
-                st.markdown(summary)
-            else:
-                st.write(result_text)
-            
+            st.markdown("### 📋 AUDITOR'S FINDINGS")
+            st.write(result.split("[SUMMARY]:")[-1])
             os.remove(tmp_path)
-
-# Sidebar Branding
-with st.sidebar:
-    st.markdown("### 🛡️ REGULATORY SHIELD")
-    st.info("Ver: 1.1.0 (Scorecard Edition)")
-    st.write(f"**Specialist:** MJ Hall")
