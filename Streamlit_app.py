@@ -8,132 +8,100 @@ import tempfile
 import os
 import re
 
-# --- 1. PAGE SETUP ---
-st.set_page_config(page_title="Bio-AI Compliance Dashboard", page_icon="⚖️", layout="wide")
-st.title("⚖️ Bio-AI Compliance & Remediation Engine")
-st.subheader("Official Gap Analysis: EU AI Act & IVDR (2026)")
+# --- 1. SETUP ---
+st.set_page_config(page_title="Bio-AI Ironclad Auditor", page_icon="⚖️", layout="wide")
+st.title("⚖️ Bio-AI Ironclad Auditor")
+st.subheader("Strict Evidence-Based Gap Analysis")
 
 # --- 2. SIDEBAR ---
 with st.sidebar:
-    st.markdown("## 🛡️ REGULATORY SHIELD")
-    st.markdown("**Lead Specialist:** MJ Hall")
-    service_tier = st.radio("Analysis Tier:", ["Standard Gap Analysis", "Premium Remediation (Consulting)"])
-    st.info("System Status: v1.3.3 - Debug Mode")
+    st.markdown("## 🛡️ AUDIT CONTROLS")
+    st.markdown("**Specialist:** MJ Hall")
+    service_tier = st.radio("Level:", ["Standard Audit", "Premium Remediation"])
 
-# --- 3. INITIALIZE BRAIN ---
-if "GROQ_API_KEY" not in st.secrets:
-    st.error("🛑 Missing GROQ_API_KEY in Secrets.")
-    st.stop()
-
+# --- 3. INITIALIZE ---
 @st.cache_resource
 def get_llm():
-    return ChatGroq(
-        temperature=0, 
-        model_name="llama-3.3-70b-versatile", 
-        api_key=st.secrets["GROQ_API_KEY"]
-    )
+    return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st.secrets["GROQ_API_KEY"])
 
-llm = get_llm()
-
-# --- 4. LOAD CORE REGS ---
 @st.cache_resource
-def load_base_knowledge():
+def load_regs():
     all_chunks = []
     base_files = ["EU_regulations.pdf", "Ivdr.pdf"]
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    
-    for file_name in base_files:
-        if os.path.exists(file_name):
-            loader = PyPDFLoader(file_name)
-            docs = loader.load()
-            all_chunks.extend(RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200).split_documents(docs))
+    for f in base_files:
+        if os.path.exists(f):
+            loader = PyPDFLoader(f)
+            all_chunks.extend(RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100).split_documents(loader.load()))
     return FAISS.from_documents(all_chunks, embeddings) if all_chunks else None
 
-vector_db = load_base_knowledge()
+llm = get_llm()
+vector_db = load_regs()
 
-# --- 5. EXECUTION ENGINE ---
-uploaded_file = st.file_uploader("Upload Technical Documentation (PDF)", type="pdf")
+# --- 4. EXECUTION ---
+uploaded_file = st.file_uploader("Upload Evidence (PDF)", type="pdf")
 
 if uploaded_file and vector_db:
-    # We use st.status to show progress so the user knows it hasn't "stopped"
-    with st.status("🔍 Processing Document...", expanded=True) as status:
-        st.write("1. Creating temporary workspace...")
+    with st.status("🔍 Analyzing Evidence...") as status:
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
-
-        st.write("2. Extracting technical evidence...")
+        
         user_loader = PyPDFLoader(tmp_path)
-        user_docs = user_loader.load()
-        user_chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(user_docs)
-        
-        # Safeguard: Truncate text if it's massive to prevent token crashes
-        user_text = "\n\n".join([c.page_content for c in user_chunks])
-        if len(user_text) > 40000:
-            user_text = user_text[:40000] + "\n\n[TEXT TRUNCATED FOR PERFORMANCE]"
-        
-        st.write("3. Document ready for audit.")
-        status.update(label="✅ Document Indexed", state="complete", expanded=False)
+        user_text = "\n\n".join([c.page_content for c in user_loader.load()])
+        status.update(label="✅ Evidence Loaded", state="complete")
 
-    if st.button("🚀 Run Comprehensive Audit"):
-        with st.status("⚖️ Executing AI Audit...", expanded=True) as audit_status:
-            try:
-                st.write("Phase A: Retrieving Regulatory Standards...")
-                reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search("Articles 10, 13, 14", k=5)])
-                
-                st.write("Phase B: Analyzing Gaps with Llama-3.3...")
-                audit_prompt = f"""
-                SYSTEM: You are a strict Regulatory Auditor. Grade strictly.
-                LAW: {reg_context}
-                EVIDENCE: {user_text}
-                
-                OUTPUT FORMAT:
-                [ART_10_SCORE]: X
-                [ART_13_SCORE]: X
-                [ART_14_SCORE]: X
-                [IVDR_SCORE]: X
-                [SUMMARY]: Detailed findings...
-                """
-                
-                # Using a try/except specifically for the API call
-                response = llm.invoke(audit_prompt)
-                audit_result = response.content
-                
-                st.write("Phase C: Parsing Scores...")
-                def parse_score(tag):
-                    pattern = rf"\[{tag}_SCORE\]: (\d+)"
-                    match = re.search(pattern, audit_result)
-                    return int(match.group(1)) if match else 0
+    if st.button("🚀 Run Strict Audit"):
+        with st.spinner("Executing Non-Bias Audit..."):
+            # 1. Get the Law
+            reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search("Articles 10, 13, 14 requirements", k=5)])
 
-                s10, s13, s14, sivdr = parse_score("ART_10"), parse_score("ART_13"), parse_score("ART_14"), parse_score("IVDR")
+            # 2. STRICT PROMPT: Separates Law from Evidence
+            strict_prompt = f"""
+            SYSTEM: You are a hostile, zero-trust Regulatory Auditor. 
+            Your only job is to verify if "USER EVIDENCE" contains technical proof of compliance.
 
-                # DISPLAY RESULTS
-                st.markdown("### 🏆 COMPLIANCE SCORECARD")
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Art 10", f"{s10}/10")
-                m2.metric("Art 13", f"{s13}/10")
-                m3.metric("Art 14", f"{s14}/10")
-                m4.metric("IVDR", f"{sivdr}/10")
+            THE LAW (Reference Only):
+            {reg_context}
 
-                st.markdown("---")
-                st.markdown("### 📋 AUDITOR'S FINDINGS")
-                summary = audit_result.split("[SUMMARY]:")[-1]
-                st.error(summary) if s10 < 5 else st.success(summary)
+            USER EVIDENCE (Audit this text):
+            {user_text}
 
-                if service_tier == "Premium Remediation (Consulting)":
-                    st.write("Phase D: Generating Strategic Roadmap...")
-                    consultant_prompt = f"As a consultant, provide a 24-week roadmap to fix: {summary}"
-                    roadmap = llm.invoke(consultant_prompt).content
-                    st.markdown("---")
-                    st.markdown("### ✨ PREMIUM: REMEDIATION STRATEGY")
-                    st.write(roadmap)
+            STRICT SCORING RULES:
+            1. If the USER EVIDENCE is a budget, financial report, or unrelated to Bio-AI technical specs, SCORE = 0.
+            2. You must provide a "FOUND QUOTE" for any score above 0. If no quote exists in the USER EVIDENCE, the score is 0.
+            3. Do not be helpful. Do not summarize the law. Only judge the evidence.
 
-                audit_status.update(label="✅ Audit Complete", state="complete")
+            OUTPUT:
+            [ART_10_SCORE]: X
+            [ART_13_SCORE]: X
+            [ART_14_SCORE]: X
+            [IVDR_SCORE]: X
+            [SUMMARY]: List what is MISSING. If evidence is unrelated, state "INVALID EVIDENCE TYPE".
+            """
 
-            except Exception as e:
-                st.error(f"⚠️ Audit Failed: {e}")
-                audit_status.update(label="❌ Audit Failed", state="error")
+            result = llm.invoke(strict_prompt).content
             
-            finally:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+            # Parsing and Display
+            scores = re.findall(r"SCORE\]: (\d+)", result)
+            s10, s13, s14, sivdr = [int(s) for s in scores] if len(scores) == 4 else [0,0,0,0]
+
+            st.markdown("### 🏆 COMPLIANCE SCORECARD")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Art 10", f"{s10}/10", delta="FAIL" if s10 < 5 else "PASS", delta_color="inverse")
+            c2.metric("Art 13", f"{s13}/10")
+            c3.metric("Art 14", f"{s14}/10")
+            c4.metric("IVDR", f"{sivdr}/10")
+
+            st.markdown("---")
+            st.markdown("### 📋 AUDITOR'S FINDINGS")
+            summary = result.split("[SUMMARY]:")[-1]
+            st.error(summary)
+            
+            if service_tier == "Premium Remediation" and s10 < 8:
+                st.markdown("---")
+                st.markdown("### ✨ PREMIUM: REMEDIATION STRATEGY")
+                roadmap = llm.invoke(f"The audit failed with these gaps: {summary}. Provide a technical 24-week roadmap to fix this.").content
+                st.write(roadmap)
+            
+            os.remove(tmp_path)
