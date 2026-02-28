@@ -1,7 +1,6 @@
 import streamlit as st
 import os
 import tempfile
-import re
 from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -15,22 +14,20 @@ st.title("⚖️ Federal & State Audit AI")
 # --- 2. SIDEBAR CONFIG ---
 with st.sidebar:
     st.markdown("## 🛡️ AUDIT CONTROLS")
-    st.markdown("**Lead Specialist:** MJ Hall")
+    st.markdown(f"**Lead Specialist:** MJ Hall")
     
-    # Selecting the framework changes the 'Law' the AI looks at
     audit_framework = st.selectbox(
         "Select Regulatory Framework",
         ["EU AI Act (Medical & IVDR)", "Colorado AI Act", "CMMC 2.0 / NIST 800-171"]
     )
     
-    # Premium Remediation adds 'How-To' steps to the output
     service_tier = st.radio("Service Level:", ["Standard Audit", "Premium Remediation"])
 
-# --- 3. DYNAMIC MAPPING (Matches your GitHub exactly) ---
+# --- 3. DYNAMIC MAPPING (Matches your GitHub screenshots exactly) ---
 framework_folders = {
     "EU AI Act (Medical & IVDR)": ".",  # Looks in root for EU_regulations.pdf & lvdr.pdf
     "Colorado AI Act": "Regulations/Colorado", 
-    "CMMC 2.0 / NIST 800-171": "Regulations/Regulations/CMMC" # Matches your screenshot typo
+    "CMMC 2.0 / NIST 800-171": "Regulations/Regulations/CMMC" # Matches the typo in your folder name
 }
 selected_reg_path = framework_folders[audit_framework]
 
@@ -64,7 +61,6 @@ def load_knowledge_base(path):
 uploaded_file = st.file_uploader("Upload Evidence (PDF)", type="pdf")
 
 st.markdown("---")
-# Button is always visible so you aren't guessing if it's there
 if st.button("🚀 Run Strict Audit"):
     if not uploaded_file:
         st.warning("Please upload a file first!")
@@ -82,15 +78,15 @@ if st.button("🚀 Run Strict Audit"):
             vector_db = load_knowledge_base(selected_reg_path)
             
             if vector_db:
-                # Step 3: Setup Auditor Personality & logic
+                # Step 3: Setup Auditor Logic
                 is_premium = service_tier == "Premium Remediation"
                 
                 if "Colorado" in audit_framework:
-                    system_role = "Colorado AI Act Compliance Lead. NOTE: AI stock holdings (NVDA, PLTR) are VALID evidence for algorithmic transparency."
-                    search_query = "Algorithmic discrimination bias impact assessment transparency"
+                    system_role = "Colorado AI Act Compliance Lead. NOTE: AI stock holdings (NVDA, PLTR) are VALID evidence for transparency."
+                    search_query = "Algorithmic discrimination bias impact assessment"
                 elif "CMMC" in audit_framework:
                     system_role = "CMMC 2.0 / NIST 800-171 Auditor. Focus on CUI data protection."
-                    search_query = "Access control encryption CUI NIST 800-171"
+                    search_query = "Access control encryption NIST 800-171"
                 else:
                     system_role = "Strict Medical AI Auditor. Focus on EU AI Act Article 10/14 and IVDR Annex II."
                     search_query = "Article 10 Data Article 14 Oversight IVDR requirements"
@@ -110,7 +106,7 @@ if st.button("🚀 Run Strict Audit"):
                 
                 INSTRUCTIONS:
                 1. Provide a COMPLIANCE SCORE (0-10).
-                2. List missing mandatory requirements.
+                2. List missing mandatory requirements in bullet points.
                 3. {remediation_instruction}
                 """
                 
@@ -118,6 +114,11 @@ if st.button("🚀 Run Strict Audit"):
                 result = llm.invoke(prompt).content
                 status.update(label="✅ Analysis Complete!", state="complete")
                 
-                # --- STEP 6: DISPLAY RESULTS (The Fix!) ---
+                # --- THE FIX: DISPLAY RESULTS ---
                 st.markdown("---")
                 st.success(f"### 📊 {audit_framework} - {service_tier} REPORT")
+                st.markdown(result) # This prints the actual findings
+                
+                st.download_button("📩 Download Full Report", result, file_name=f"Audit_{audit_framework}.md")
+            else:
+                st.error(f"Error: No PDF files found in '{selected_reg_path}'. Double-check your GitHub folder names!")
