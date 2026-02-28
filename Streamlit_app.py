@@ -18,21 +18,23 @@ with st.sidebar:
     st.markdown("**Specialist:** MJ Hall")
     audit_framework = st.selectbox(
         "Select Regulatory Framework",
-        ["EU AI Act (Medical)", "Colorado AI Act", "CMMC 2.0 / NIST 800-171"]
+        ["EU AI Act (Medical & IVDR)", "Colorado AI Act", "CMMC 2.0 / NIST 800-171"]
     )
     service_tier = st.radio("Level:", ["Standard Audit", "Premium Remediation"])
 
-# --- 3. DYNAMIC MAPPING (Matches your GitHub exactly) ---
+# --- 3. DYNAMIC MAPPING ---
+# These match your GitHub folders exactly based on your screenshots
 framework_folders = {
-    "EU AI Act (Medical)": ".",  # Looks in main folder for EU_regulations.pdf & lvdr.pdf
+    "EU AI Act (Medical & IVDR)": ".",  # Looks in main folder for EU_regulations.pdf & lvdr.pdf
     "Colorado AI Act": "Regulations/Colorado", 
-    "CMMC 2.0 / NIST 800-171": "Regulations/Regulations/CMMC" # Matches the typo in your folder name
+    "CMMC 2.0 / NIST 800-171": "Regulations/Regulations/CMMC"
 }
 selected_reg_path = framework_folders[audit_framework]
 
 # --- 4. CORE FUNCTIONS ---
 @st.cache_resource
 def get_llm():
+    # Uses your GROQ_API_KEY from Streamlit Secrets
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st.secrets["GROQ_API_KEY"])
 
 def load_knowledge_base(path):
@@ -53,7 +55,7 @@ def load_knowledge_base(path):
 uploaded_file = st.file_uploader("Upload Evidence (PDF)", type="pdf")
 
 st.markdown("---")
-# Button is always visible so you can see it on your phone!
+# The button is always visible
 if st.button("🚀 Run Strict Audit"):
     if not uploaded_file:
         st.warning("Please upload a file first!")
@@ -71,39 +73,43 @@ if st.button("🚀 Run Strict Audit"):
             vector_db = load_knowledge_base(selected_reg_path)
             
             if vector_db:
-                # Step 3: Setup Auditor Personality & Search
+                # Step 3: Setup Auditor Personality
                 if "Colorado" in audit_framework:
-                    system_role = "Colorado AI Act Auditor. AI stock holdings (NVDA, PLTR) are VALID evidence for transparency and business risk audits."
-                    search_query = "Impact assessment bias algorithmic discrimination duty of care"
+                    system_role = "Colorado AI Act Auditor. AI stock holdings (NVDA, PLTR) are VALID evidence for business transparency."
+                    search_query = "Algorithmic discrimination bias impact assessment"
                 elif "CMMC" in audit_framework:
-                    system_role = "CMMC 2.0 Auditor. Focus on NIST 800-171 security controls and CUI data protection."
-                    search_query = "Access control encryption CUI NIST 800-171"
+                    system_role = "CMMC 2.0 Auditor. Focus on NIST 800-171 and CUI security."
+                    search_query = "Access control encryption CUI protocols"
                 else:
-                    system_role = "Hostile Medical AI Auditor. Focus on Article 10 (Data) and Article 14 (Human Oversight)."
-                    search_query = "Article 10 Article 14 mandatory technical requirements"
+                    system_role = "Medical AI & IVDR Auditor. Focus on Article 10/14 and IVDR Annex II technical documentation."
+                    search_query = "Article 10 Data Article 14 Oversight IVDR requirements"
 
                 # Step 4: Run the AI
                 reg_context = "\n\n".join([d.page_content for d in vector_db.similarity_search(search_query, k=5)])
                 
                 prompt = f"""
                 SYSTEM: You are a {system_role}. 
-                Your job is to strictly verify if the USER EVIDENCE matches the LAW.
+                Verify the USER EVIDENCE against the LAW provided.
                 
                 LAW REFERENCE: {reg_context}
                 USER EVIDENCE: {user_text}
                 
                 OUTPUT: 
                 1. Provide a SCORE (0-10) for overall compliance.
-                2. If it's a financial plan for Colorado, acknowledge the AI holdings as transparency proof.
-                3. List exactly what is MISSING.
+                2. Be detailed. If it's Colorado, mention if their AI stock picks count as transparency.
+                3. List MISSING items in bullet points.
                 """
                 
                 llm = get_llm()
                 result = llm.invoke(prompt).content
                 status.update(label="✅ Analysis Complete!", state="complete")
                 
-                # Step 5: Display Findings
-                st.markdown(f"### 🏆 {audit_framework} AUDIT REPORT")
-                st.info(result)
+                # --- STEP 6: THE OUTPUT (The part that was missing!) ---
+                st.markdown("---")
+                st.success("### 📊 FINAL AUDIT REPORT")
+                st.markdown(result) # This prints the AI's findings
+                
+                # Add a download button for the client
+                st.download_button("📩 Download Audit Report", result, file_name="MJ_Hall_Audit.md")
             else:
-                st.error(f"Error: No PDF files found in '{selected_reg_path}'. Double-check your GitHub folder names!")
+                st.error(f"Error: No PDF files found in '{selected_reg_path}'. Check your GitHub folder names!")
