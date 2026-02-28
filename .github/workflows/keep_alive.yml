@@ -1,1 +1,10 @@
-
+name: Wake Up App
+on:
+  schedule:
+    - cron: '15 */6 * * *' # Pings at 15 minutes past the hour every 6 hours
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Ping to App
+        run: curl -I https://ai-medreg-engine.streamlit.app/
