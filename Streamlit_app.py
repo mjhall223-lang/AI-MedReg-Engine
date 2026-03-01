@@ -16,7 +16,6 @@ with st.sidebar:
     st.markdown("## 🛡️ AUDIT CONTROLS")
     st.markdown("**Lead Specialist:** MJ Hall")
     
-    # Frameworks mapped to your GitHub folder structure
     audit_framework = st.selectbox("Framework", [
         "EU AI Act (Medical & IVDR)", 
         "Colorado AI Act", 
@@ -56,11 +55,14 @@ def load_knowledge_base(path):
 def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "OFFICIAL REGULATORY AUDIT FINDING", ln=True, align='C')
+    pdf.set_font("Arial", 'I', 10)
+    pdf.cell(0, 10, "Auditor: MJ Hall | Generated via AI-MedReg-Engine", ln=True, align='C')
+    pdf.ln(10)
     pdf.set_font("Arial", size=11)
-    # Safe encoding for regulatory symbols
     safe_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, txt=safe_text)
-    # Return as bytes for Streamlit compatibility
     return bytes(pdf.output())
 
 # --- 4. THE AUDIT ENGINE ---
@@ -72,38 +74,29 @@ if st.button("🚀 Run Full Regulatory Audit"):
         st.warning("Please upload a file first!")
     else:
         with st.status("🔍 CROSS-REFERENCING FEDERAL & STATE LAW...") as status:
-            # Persistent path variable to prevent NameErrors
             tmp_path = ""
-            
             try:
-                # 1. Handle Uploaded File
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_path = tmp_file.name
                 
-                # 2. Process Evidence
-                user_loader = PyPDFLoader(tmp_path)
-                user_text = "\n\n".join([c.page_content for c in user_loader.load()])
-                
-                # 3. Process Regulatory KB
+                user_text = "\n\n".join([c.page_content for c in PyPDFLoader(tmp_path).load()])
                 vector_db = load_knowledge_base(selected_reg_path)
                 
                 if vector_db:
                     is_premium = service_tier == "Premium Remediation"
                     
-                    # Mapping logic for specialized personas
                     if "Colorado" in audit_framework:
-                        role, query = "Colorado Attorney General Enforcement Officer", "Duty of care risk management"
+                        role, query = "Colorado Attorney General Enforcement Officer", "Duty of care risk management algorithmic discrimination"
                     elif "CMMC" in audit_framework:
                         role, query = "DoD Cyber Auditor", "NIST 800-171 security controls CUI"
                     elif "Bias" in audit_framework:
-                        role, query = "Clinical Equity & Bias Auditor", "Article 10 bias mitigation medical AI"
+                        role, query = "Clinical Equity & Bias Auditor", "Article 10 bias mitigation demographic representation"
                     elif "FDA" in audit_framework:
-                        role, query = "FDA Digital Health Specialist", "Predetermined Change Control Plan PCCP"
+                        role, query = "FDA Digital Health Specialist", "PCCP Modification Protocol Impact Assessment"
                     else:
-                        role, query = "EU Notified Body Compliance Lead", "Article 10 Data Article 14 Oversight"
+                        role, query = "EU Notified Body Compliance Lead", "Article 10 Data Quality Article 14 Human Oversight"
 
-                    # Retrieval
                     docs = vector_db.similarity_search(query, k=5)
                     context_list = []
                     for d in docs:
@@ -111,41 +104,46 @@ if st.button("🚀 Run Full Regulatory Audit"):
                         page_num = d.metadata.get('page', 'N/A')
                         context_list.append(f"SOURCE: {source_name} (Page {page_num}):\n{d.page_content}")
                     
-                    reg_context = "\n\n---\n\n".join(context_list)
-                    remediation_instruction = "Provide a full REMEDIATION PLAN." if is_premium else "List missing requirements only."
+                    reg_context = "\n\n----- \n\n".join(context_list)
                     
+                    # THE "STRICT" PROMPT INSTRUCTIONS
                     prompt = f"""
-                    SYSTEM: You are the {role}. You are strict and legally focused.
-                    LAW: {reg_context}
-                    EVIDENCE: {user_text}
+                    SYSTEM: You are the {role}. You are strictly legally focused and objective. 
+                    STRICTNESS RULE: Do not infer or assume policies exist. If a requirement is not explicitly stated in the EVIDENCE, it does not exist. 
+
+                    LAW (REFERENCE): 
+                    {reg_context}
+                    
+                    EVIDENCE (UPLOADED): 
+                    {user_text}
 
                     TASK:
-                    1. STATUS: [PASS] or [FAIL].
-                    2. SCORE: [0-10].
-                    3. GAPS: Cite specific sources and page numbers.
-                    4. {remediation_instruction}
+                    1. STATUS: Provide one: [PASS], [MINOR NON-CONFORMANCE], or [MAJOR NON-CONFORMANCE/FAIL].
+                       - Any missing core legal anchor (like an Impact Assessment, Data Governance policy, or Acceptance Criteria) MUST be a [MAJOR NON-CONFORMANCE/FAIL].
+                    2. COMPLIANCE SCORE: [0-10]. Be brutal.
+                    3. GAPS: Cite specific laws, Articles, or Guidance Page Numbers.
+                    4. RISK ASSESSMENT: For every gap, explain the regulatory risk (e.g., FDA Warning Letter, legal liability, or market withdrawal).
+                    5. {"Provide a full REMEDIATION PLAN." if is_premium else "List missing requirements only."}
                     """
                     
                     final_report = get_llm().invoke(prompt).content
-                    status.update(label="✅ Analysis Complete!", state="complete")
+                    status.update(label="✅ Audit Complete!", state="complete")
                     
                     with results_container:
-                        st.success("### 📜 OFFICIAL REGULATORY REPORT")
+                        st.error("### 📜 OFFICIAL REGULATORY FINDINGS")
                         st.markdown(final_report)
                         
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.download_button("📩 Export Markdown", final_report, file_name="Audit.md")
+                            st.download_button("📩 Export Markdown", final_report, file_name="Audit_Finding.md")
                         with col2:
                             pdf_data = create_pdf(final_report)
                             st.download_button("📄 Export Official PDF", pdf_data, file_name="Official_Audit.pdf", mime="application/pdf")
                 else:
-                    st.error(f"KB Path Error: {selected_reg_path}")
+                    st.error(f"KB Error: {selected_reg_path}")
 
             except Exception as e:
                 st.error(f"Processing Error: {e}")
-            
             finally:
-                # SAFE-DELETE: Ensure temp file is wiped from the cloud server
                 if tmp_path and os.path.exists(tmp_path):
                     os.remove(tmp_path)
