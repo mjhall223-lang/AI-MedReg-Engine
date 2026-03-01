@@ -12,6 +12,10 @@ from fpdf import FPDF
 st.set_page_config(page_title="Federal & State Audit AI", page_icon="⚖️", layout="wide")
 st.title("⚖️ Federal & State Audit AI")
 
+# Initialize Chat History for the Auditor
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
 with st.sidebar:
     st.markdown("## 🛡️ AUDIT CONTROLS")
     st.markdown("**Lead Specialist:** MJ Hall")
@@ -25,6 +29,10 @@ with st.sidebar:
     ])
     
     service_tier = st.radio("Service Level:", ["Standard Audit", "Premium Remediation"])
+    
+    if st.button("Clear Chat History"):
+        st.session_state.messages = []
+        st.rerun()
 
 # --- 2. GITHUB MAPPING ---
 framework_folders = {
@@ -56,7 +64,7 @@ def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "OFFICIAL REGULATORY AUDIT FINDING", ln=True, align='C')
+    pdf.cell(0, 10, "OFFICIAL REGULATORY FINDING", ln=True, align='C')
     pdf.set_font("Arial", 'I', 10)
     pdf.cell(0, 10, "Auditor: MJ Hall | Generated via AI-MedReg-Engine", ln=True, align='C')
     pdf.ln(10)
@@ -84,66 +92,84 @@ if st.button("🚀 Run Full Regulatory Audit"):
                 vector_db = load_knowledge_base(selected_reg_path)
                 
                 if vector_db:
-                    is_premium = service_tier == "Premium Remediation"
+                    st.session_state.vector_db = vector_db # Save for chat
                     
                     if "Colorado" in audit_framework:
-                        role, query = "Colorado Attorney General Enforcement Officer", "Duty of care risk management algorithmic discrimination"
+                        role, query = "Colorado Attorney General", "Duty of care risk management discrimination"
                     elif "CMMC" in audit_framework:
-                        role, query = "DoD Cyber Auditor", "NIST 800-171 security controls CUI"
+                        role, query = "DoD Cyber Auditor", "NIST 800-171 System Security Plan SSP"
                     elif "Bias" in audit_framework:
-                        role, query = "Clinical Equity & Bias Auditor", "Article 10 bias mitigation demographic representation"
+                        role, query = "Clinical Equity Auditor", "Article 10 bias mitigation medical AI"
                     elif "FDA" in audit_framework:
-                        role, query = "FDA Digital Health Specialist", "PCCP Modification Protocol Impact Assessment"
+                        role, query = "FDA Digital Health Specialist", "PCCP Algorithm Modification Protocol"
                     else:
-                        role, query = "EU Notified Body Compliance Lead", "Article 10 Data Quality Article 14 Human Oversight"
+                        role, query = "EU Compliance Lead", "Article 10 Data Governance Article 14 Oversight"
 
+                    st.session_state.current_role = role
+                    
                     docs = vector_db.similarity_search(query, k=5)
-                    context_list = []
-                    for d in docs:
-                        source_name = os.path.basename(d.metadata.get('source', 'Regulation'))
-                        page_num = d.metadata.get('page', 'N/A')
-                        context_list.append(f"SOURCE: {source_name} (Page {page_num}):\n{d.page_content}")
+                    reg_context = "\n\n".join([f"SOURCE: {os.path.basename(d.metadata['source'])} (Page {d.metadata.get('page','N/A')}):\n{d.page_content}" for d in docs])
                     
-                    reg_context = "\n\n----- \n\n".join(context_list)
-                    
-                    # THE "STRICT" PROMPT INSTRUCTIONS
                     prompt = f"""
-                    SYSTEM: You are the {role}. You are strictly legally focused and objective. 
-                    STRICTNESS RULE: Do not infer or assume policies exist. If a requirement is not explicitly stated in the EVIDENCE, it does not exist. 
-
-                    LAW (REFERENCE): 
-                    {reg_context}
-                    
-                    EVIDENCE (UPLOADED): 
-                    {user_text}
+                    SYSTEM: You are the {role}. Strict Zero-Tolerance Auditor. 
+                    REFERENCE LAW: {reg_context}
+                    EVIDENCE: {user_text}
 
                     TASK:
-                    1. STATUS: Provide one: [PASS], [MINOR NON-CONFORMANCE], or [MAJOR NON-CONFORMANCE/FAIL].
-                       - Any missing core legal anchor (like an Impact Assessment, Data Governance policy, or Acceptance Criteria) MUST be a [MAJOR NON-CONFORMANCE/FAIL].
-                    2. COMPLIANCE SCORE: [0-10]. Be brutal.
-                    3. GAPS: Cite specific laws, Articles, or Guidance Page Numbers.
-                    4. RISK ASSESSMENT: For every gap, explain the regulatory risk (e.g., FDA Warning Letter, legal liability, or market withdrawal).
-                    5. {"Provide a full REMEDIATION PLAN." if is_premium else "List missing requirements only."}
+                    1. STATUS: [PASS], [MINOR NON-CONFORMANCE], or [MAJOR NON-CONFORMANCE/FAIL].
+                    2. SCORE: [0-10]. 
+                    3. GAPS: Cite specific laws and page numbers.
+                    4. RISK: Explain regulatory consequences.
+                    5. {"REMEDIATION: Provide draft language." if service_tier == "Premium Remediation" else "List missing requirements."}
                     """
                     
-                    final_report = get_llm().invoke(prompt).content
+                    report = get_llm().invoke(prompt).content
+                    st.session_state.final_report = report
                     status.update(label="✅ Audit Complete!", state="complete")
                     
                     with results_container:
                         st.error("### 📜 OFFICIAL REGULATORY FINDINGS")
-                        st.markdown(final_report)
+                        st.markdown(report)
                         
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.download_button("📩 Export Markdown", final_report, file_name="Audit_Finding.md")
+                            st.download_button("📩 Export Markdown", report, file_name="Audit.md")
                         with col2:
-                            pdf_data = create_pdf(final_report)
+                            pdf_data = create_pdf(report)
                             st.download_button("📄 Export Official PDF", pdf_data, file_name="Official_Audit.pdf", mime="application/pdf")
-                else:
-                    st.error(f"KB Error: {selected_reg_path}")
-
-            except Exception as e:
-                st.error(f"Processing Error: {e}")
             finally:
                 if tmp_path and os.path.exists(tmp_path):
                     os.remove(tmp_path)
+
+# --- 5. INTERACTIVE REMEDIATION CHAT ---
+if "final_report" in st.session_state:
+    st.markdown("---")
+    st.subheader("💬 Interactive Auditor Chat")
+    st.info("Ask the auditor how to fix the gaps identified above.")
+
+    # Display Chat History
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat Input
+    if user_input := st.chat_input("Ex: How do I draft a Data Governance policy?"):
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        with st.chat_message("assistant"):
+            # Use RAG to answer from the knowledge base
+            context_docs = st.session_state.vector_db.similarity_search(user_input, k=3)
+            context_text = "\n\n".join([d.page_content for d in context_docs])
+            
+            chat_prompt = f"""
+            ROLE: {st.session_state.current_role}
+            CONTEXT: {context_text}
+            QUESTION: {user_input}
+            INSTRUCTION: Use the context to explain how to fix the gap. Cite the document names.
+            """
+            
+            response = get_llm().invoke(chat_prompt).content
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
