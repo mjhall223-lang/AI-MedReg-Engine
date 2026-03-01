@@ -9,9 +9,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from fpdf import FPDF
 
 # --- 1. CONFIG & SESSION STATE ---
-st.set_page_config(page_title="Federal & State Audit AI", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="AI-MedReg-Engine", page_icon="⚖️", layout="wide")
 st.title("⚖️ Federal & State Audit AI")
 
+# Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -28,9 +29,12 @@ with st.sidebar:
     ])
     
     service_tier = st.radio("Service Level:", ["Standard Audit", "Premium Remediation"])
+    
+    if st.button("🗑️ Clear Chat History"):
+        st.session_state.messages = []
+        st.rerun()
 
-# --- 2. GITHUB MAPPING ---
-# Matches your exact path: Regulations/Regulations/Federal
+# --- 2. GITHUB MAPPING (Optimized for your structure) ---
 framework_folders = {
     "EU AI Act (Medical & IVDR)": ".",  
     "Colorado AI Act": "Regulations/Colorado", 
@@ -40,7 +44,7 @@ framework_folders = {
 }
 selected_reg_path = framework_folders[audit_framework]
 
-# --- 3. FUNCTIONS ---
+# --- 3. CORE FUNCTIONS ---
 @st.cache_resource
 def get_llm():
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st.secrets["GROQ_API_KEY"])
@@ -51,7 +55,8 @@ def load_knowledge_base(path):
         for f in os.listdir(path):
             if f.endswith(".pdf"):
                 loader = PyPDFLoader(os.path.join(path, f))
-                all_chunks.extend(RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200).split_documents(loader.load()))
+                # Small chunks to ensure "Necessary_audit_docs" details are captured accurately
+                all_chunks.extend(RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100).split_documents(loader.load()))
     return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")) if all_chunks else None
 
 def create_pdf(text):
@@ -67,7 +72,7 @@ def create_pdf(text):
     pdf.multi_cell(0, 10, txt=safe_text)
     return bytes(pdf.output())
 
-# --- 4. THE AUDIT ENGINE ---
+# --- 4. AUDIT ENGINE ---
 uploaded_file = st.file_uploader("Upload Evidence (PDF)", type="pdf")
 
 if st.button("🚀 Run Full Regulatory Audit"):
@@ -87,24 +92,24 @@ if st.button("🚀 Run Full Regulatory Audit"):
                 if vector_db:
                     st.session_state.vector_db = vector_db
                     
-                    # Persona Mapping
                     role_map = {
                         "Colorado AI Act": "Colorado Attorney General",
                         "CMMC 2.0": "DoD Cyber Auditor",
-                        "Medical Bias & Health Equity (Article 10)": "Clinical Equity Auditor",
                         "FDA PCCP (Clinical Change)": "FDA Digital Health Specialist",
                         "EU AI Act (Medical & IVDR)": "EU Notified Body Lead"
                     }
                     role = role_map.get(audit_framework, "Regulatory Lead")
                     st.session_state.current_role = role
 
-                    # Retrieve context (including your new Doc of Docs!)
-                    docs = vector_db.similarity_search("Mandatory requirements and missing document gaps", k=6)
+                    # RAG Retrieval: pulling federal law AND your internal requirements doc
+                    docs = vector_db.similarity_search("Mandatory modification protocol requirements and audit pillars", k=6)
                     reg_context = "\n\n".join([f"SOURCE: {os.path.basename(d.metadata['source'])}:\n{d.page_content}" for d in docs])
                     
                     prompt = f"""
-                    SYSTEM: You are the {role}. You are strictly focused on identifying non-conformance.
-                    INTERNAL STANDARDS & LAW: 
+                    SYSTEM: You are the {role}. You are an objective, zero-tolerance federal auditor.
+                    STRICTNESS RULE: Use the provided INTERNAL STANDARDS to identify missing pillars. If an AMP, FRIA, or Traceability Table is missing, the status MUST be [MAJOR NON-CONFORMANCE/FAIL].
+
+                    INTERNAL STANDARDS & FEDERAL LAW: 
                     {reg_context}
                     
                     EVIDENCE: 
@@ -112,9 +117,10 @@ if st.button("🚀 Run Full Regulatory Audit"):
 
                     TASK:
                     1. STATUS: [PASS], [MINOR NON-CONFORMANCE], or [MAJOR NON-CONFORMANCE/FAIL].
-                    2. SCORING RULE: If any core pillar (AMP, FRIA, SSP, or Impact Assessment) from the INTERNAL STANDARDS is missing, the score MUST be below 5/10.
-                    3. GAPS: Cite specific requirements from the INTERNAL STANDARDS docs.
-                    4. {"REMEDIATION: Provide draft policy language." if service_tier == "Premium Remediation" else "List missing requirements."}
+                    2. SCORE: [0-10]. No partial credit for missing required documents.
+                    3. GAPS: Cite specific requirements found in the INTERNAL STANDARDS and the laws.
+                    4. RISK: Explain regulatory risk (e.g., Warning Letter, Legal Liability).
+                    5. {"REMEDIATION: Provide specific draft policy language." if service_tier == "Premium Remediation" else "List missing requirements."}
                     """
                     
                     report = get_llm().invoke(prompt).content
@@ -135,19 +141,20 @@ if st.button("🚀 Run Full Regulatory Audit"):
 # --- 5. INTERACTIVE REMEDIATION CHAT ---
 if "final_report" in st.session_state:
     st.markdown("---")
-    st.subheader("💬 Interactive Auditor Chat")
+    st.subheader("💬 Ask the Lead Auditor")
     
     for message in st.session_state.messages:
         with st.chat_message(message["role"]): st.markdown(message["content"])
 
-    if user_input := st.chat_input("Ex: How do I fix the AMP threshold gap?"):
+    if user_input := st.chat_input("Ex: What exact thresholds am I missing for a PASS?"):
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"): st.markdown(user_input)
 
         with st.chat_message("assistant"):
+            # Use the vector database to find answers in your Doc of Docs
             context_docs = st.session_state.vector_db.similarity_search(user_input, k=3)
             context_text = "\n\n".join([d.page_content for d in context_docs])
             
-            response = get_llm().invoke(f"ROLE: {st.session_state.current_role}\nCONTEXT: {context_text}\nQUESTION: {user_input}\nUse context to explain remediation steps.").content
+            response = get_llm().invoke(f"ROLE: {st.session_state.current_role}\nCONTEXT: {context_text}\nQUESTION: {user_input}\nUse the internal standards to explain how to fix the gap.").content
             st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
