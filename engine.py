@@ -47,7 +47,7 @@ def create_pdf(text):
     pdf.multi_cell(0, 10, txt=text.encode('latin-1', 'replace').decode('latin-1'))
     pdf.ln(20); pdf.set_font("Arial", 'B', 11); pdf.cell(0, 10, "OFFICIAL CERTIFICATION:", ln=True)
     pdf.set_font("Arial", size=10); pdf.cell(0, 10, f"Date: {datetime.date.today()}", ln=True)
-    pdf.cell(0, 10, "Lead Specialist: Myia Hall", ln=True); pdf.ln(10)
+    pdf.cell(0, 10, f"Lead Specialist: Myia Hall", ln=True); pdf.ln(10)
     pdf.cell(0, 10, "X________________________________________", ln=True)
     pdf.cell(0, 10, "Signature of Regulatory Architect", ln=True)
     return bytes(pdf.output())
