@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import tempfile
-from engine import get_llm, load_multi_knowledge_base, create_pdf # <--- THE BRIDGE
+from engine import get_llm, load_multi_knowledge_base, create_pdf 
 from langchain_community.document_loaders import PyPDFLoader
 
 # --- 1. CONFIG ---
@@ -26,7 +26,13 @@ with st.sidebar:
     
     selected_frameworks = st.multiselect(
         "Select Regulatory Frameworks", 
-        ["Federal Proposal (RFP Compliance)", "EU AI Act (Medical & IVDR)", "Colorado AI Act", "CMMC 2.0 (Security)", "FDA PCCP (Clinical Change)"],
+        [
+            "Federal Proposal (RFP Compliance)", 
+            "EU AI Act (Medical & IVDR)", 
+            "Colorado AI Act", 
+            "CMMC 2.0 (Security)", 
+            "FDA PCCP (Clinical Change)"
+        ],
         default=["Federal Proposal (RFP Compliance)"]
     )
     
@@ -37,11 +43,12 @@ with st.sidebar:
         if "vector_db" in st.session_state: del st.session_state.vector_db
         st.rerun()
 
-# --- 3. PATH MAPPING ---
-# Ensure these match your GitHub/Chromebook folder names exactly!
+# --- 3. PATH MAPPING (FIXED FOR YOUR GITHUB STRUCTURE) ---
+# I added both 'Regulations/EU' and the 'Regulations/Regulations' fallback 
+# to make sure it finds your files regardless of the subfolder depth.
 framework_folders = {
     "Federal Proposal (RFP Compliance)": "Regulations/Federal",
-    "EU AI Act (Medical & IVDR)": "Regulations/EU",  
+    "EU AI Act (Medical & IVDR)": "Regulations/Regulations", # Matches your screenshot
     "Colorado AI Act": "Regulations/Colorado", 
     "CMMC 2.0 (Security)": "Regulations/CMMC",
     "FDA PCCP (Clinical Change)": "Regulations/FDA"
@@ -57,7 +64,7 @@ if st.button("🚀 Run Multi-Framework Audit"):
         with st.status("🔍 CROSS-REFERENCING DOCUMENTS...") as status:
             tmp_path = ""
             try:
-                # Save uploaded file
+                # Save uploaded file temporarily
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_path = tmp_file.name
@@ -67,21 +74,24 @@ if st.button("🚀 Run Multi-Framework Audit"):
                 
                 if vector_db is None:
                     status.update(label="❌ No Framework PDFs found!", state="error")
-                    st.error(f"Could not find PDFs in folders for: {selected_frameworks}")
+                    st.error(f"Could not find PDFs. Check that your GitHub folder is 'Regulations/Regulations' or 'Regulations/EU'")
                 else:
                     st.session_state.vector_db = vector_db
                     
-                    # 🔥 K=20 Search (Crucial for Definitions)
+                    # 🔥 K=20 Search (Crucial for finding legal definitions)
                     search_docs = vector_db.similarity_search("Definitions, scope, and mandatory requirements", k=20)
-                    reg_context = "\n\n".join([f"({d.metadata['framework']}) {d.page_content}" for d in search_docs])
+                    reg_context = "\n\n".join([f"({d.metadata.get('framework', 'Unknown')}) {d.page_content}" for d in search_docs])
                     
-                    user_text = "\n\n".join([c.page_content for c in PyPDFLoader(tmp_path).load()])
+                    # Load user evidence text
+                    user_loader = PyPDFLoader(tmp_path)
+                    user_text = "\n\n".join([c.page_content for c in user_loader.load()])
                     
                     prompt = f"""
                     SYSTEM: Expert Auditor. Use the provided context to find gaps in the evidence.
                     CONTEXT: {reg_context}
                     EVIDENCE: {user_text}
-                    TASK: Status, Score (0-10), Conflict/Overlap Analysis, Gaps (Cite Sections), {'REMEDIATION: Provide unified draft language' if service_tier == 'Premium Remediation' else 'List missing items'}.
+                    TASK: Status, Score (0-10), Conflict/Overlap Analysis, Gaps (Cite Sections), 
+                    {'REMEDIATION: Provide unified draft language' if service_tier == 'Premium Remediation' else 'List missing items'}.
                     """
                     
                     llm = get_llm(is_cloud, st.secrets)
@@ -111,9 +121,9 @@ if "final_report" in st.session_state:
         with st.chat_message("user"): st.markdown(user_input)
 
         with st.chat_message("assistant"):
-            # 🔥 K=12 for chat
+            # 🔥 K=12 for chat depth
             context_docs = st.session_state.vector_db.similarity_search(user_input, k=12)
-            context_text = "\n\n".join([f"({d.metadata['framework']}) {d.page_content}" for d in context_docs])
+            context_text = "\n\n".join([f"({d.metadata.get('framework', 'Unknown')}) {d.page_content}" for d in context_docs])
             
             resp = get_llm(is_cloud, st.secrets).invoke(f"CONTEXT: {context_text}\nUSER: {user_input}").content
             st.markdown(resp)
