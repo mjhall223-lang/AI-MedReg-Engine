@@ -5,6 +5,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.chat_models import ChatOllama
 from fpdf import FPDF
+import datetime
 
 # --- HYBRID LLM SWITCH ---
 def get_llm(is_cloud, st_secrets):
@@ -44,12 +45,25 @@ class EconomicImpact:
         payroll_tax = (replaced_staff * 60000) * 0.15
         return {"token_tax": round(token_tax, 2), "payroll_tax": round(payroll_tax, 2), "total": round(token_tax + payroll_tax, 2)}
 
-# --- PDF GENERATOR ---
+# --- PDF GENERATOR (With Signature) ---
 def create_pdf(text):
     pdf = FPDF()
     pdf.add_page(); pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "READY-AUDIT: REGULATORY & REMEDIATION REPORT", ln=True, align='C')
     pdf.set_font("Arial", size=11)
+    
     safe_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, txt=safe_text)
+    
+    # Signature Block
+    pdf.ln(20)
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(0, 10, "CERTIFICATION OF AUDIT:", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 10, f"Date of Audit: {datetime.date.today()}", ln=True)
+    pdf.cell(0, 10, "Lead Specialist: Myia Hall", ln=True)
+    pdf.ln(10)
+    pdf.cell(0, 10, "X________________________________________", ln=True)
+    pdf.cell(0, 10, "Signature of Regulatory Architect", ln=True)
+    
     return bytes(pdf.output())
