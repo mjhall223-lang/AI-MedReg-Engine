@@ -17,19 +17,19 @@ def get_llm(is_cloud, st_secrets):
         )
     return ChatOllama(model="gemma2:2b", temperature=0)
 
-# --- SMART-SCAN KNOWLEDGE BASE ---
+# --- RECURSIVE KNOWLEDGE BASE (Path-Agnostic) ---
 def load_multi_knowledge_base(selected_list, root_folder="Regulations"):
     all_chunks = []
     if not os.path.exists(root_folder):
         return None
 
-    # Deep-scan through all subdirectories (Fixes the nested folder issue)
+    # Recursively walk through EVERY subfolder
     for root, dirs, files in os.walk(root_folder):
         for file in files:
             if file.endswith(".pdf"):
-                # Logic: Only load if the file's path matches a selected framework
-                # or if the user is just scanning 'all'
                 path_lower = root.lower()
+                # Check if the path contains any of the selected frameworks
+                # e.g., if 'federal' is in 'Regulations/Regulations/Federal'
                 matches_framework = any(f.split()[0].lower() in path_lower for f in selected_list)
 
                 if matches_framework or not selected_list:
@@ -40,10 +40,7 @@ def load_multi_knowledge_base(selected_list, root_folder="Regulations"):
                         for d in docs:
                             d.metadata["source_file"] = file
                         
-                        splitter = RecursiveCharacterTextSplitter(
-                            chunk_size=1200, 
-                            chunk_overlap=250
-                        )
+                        splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=250)
                         all_chunks.extend(splitter.split_documents(docs))
                     except:
                         continue
@@ -57,7 +54,7 @@ def load_multi_knowledge_base(selected_list, root_folder="Regulations"):
 class EconomicImpact:
     @staticmethod
     def calculate_liability(token_usage=0, replaced_staff=0):
-        # AI Dividend Tax ($0.0005/1k tokens) + 15% Shadow Payroll Tax
+        # AI Dividend ($0.0005/1k) + 15% Shadow Payroll
         token_tax = (token_usage / 1000) * 0.0005
         payroll_tax = (replaced_staff * 60000) * 0.15
         return {
@@ -71,7 +68,7 @@ def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "READY-AUDIT: REGULATORY & ECONOMIC IMPACT REPORT", ln=True, align='C')
+    pdf.cell(0, 10, "READY-AUDIT: REGULATORY & ECONOMIC REPORT", ln=True, align='C')
     pdf.set_font("Arial", size=11)
     safe_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, txt=safe_text)
