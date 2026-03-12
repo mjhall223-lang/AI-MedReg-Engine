@@ -57,7 +57,7 @@ if st.button("🚀 Run Comprehensive Audit & Remediation"):
             vector_db = load_multi_knowledge_base(selected_frameworks, selected_fed_docs)
             st.session_state.vector_db = vector_db
             
-            search_query = "AI tax, labor displacement, worker transition, Section 1701, transparency logs"
+            search_query = "AI tax, labor displacement, worker transition, Section 1701, abundance bonus"
             search_docs = vector_db.similarity_search(search_query, k=25) if vector_db else []
             reg_context = "\n\n".join([f"(File: {d.metadata.get('source_file')}) {d.page_content}" for d in search_docs])
             user_text = "\n\n".join([c.page_content for c in PyPDFLoader(tmp_path).load()])
@@ -74,27 +74,26 @@ if st.button("🚀 Run Comprehensive Audit & Remediation"):
             3. Address the 'Great Divergence' score (1-10).
             
             REMEDIATION (PREMIUM):
-            - If STATUS is 'Fail' or 'Economic Score' < 5, DRAFT a 'Worker Transition & Dividend Clause'.
-            - Include specific language for: Re-skilling, Abundance Bonuses, and TX_CPA-compliant audit logging.
+            - IF 'Great Divergence' score is BELOW 9, you MUST provide a 'REMEDIATION' section.
+            - Draft a 'Worker Transition & Dividend Clause'.
+            - Include language for: 5% Abundance Bonuses, Re-skilling, and TX_CPA-compliant logging.
             """
             
             report = get_llm(is_cloud, st.secrets).invoke(prompt).content
             st.session_state.final_report = report
             
-            # SIDE-BY-SIDE DISPLAY
             col1, col2 = st.columns(2)
             with col1:
                 st.error("### 📜 AUDIT FINDINGS")
-                # Split report to show Findings vs Remediation if possible
                 st.markdown(report.split("REMEDIATION")[0])
             with col2:
                 st.success("### 🛠️ PROPOSED REMEDIATION")
                 if "REMEDIATION" in report:
                     st.markdown(report.split("REMEDIATION")[1])
                 else:
-                    st.write("No remediation required for this score.")
+                    st.info("The system scored high for 'Shared Abundance'. No major remediation required.")
             
-            st.download_button("📄 Download Full Report", create_pdf(report), file_name="ReadyAudit_Full_Report.pdf")
+            st.download_button("📄 Download Official Certified Report", create_pdf(report), file_name="Certified_ReadyAudit_Report.pdf")
             os.remove(tmp_path)
 
 # --- CHAT ---
