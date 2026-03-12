@@ -21,17 +21,15 @@ with st.sidebar:
         default=["Federal Proposal", "EU AI Act"]
     )
 
-    # DYNAMIC FILE CHECKER (Visualizes your GitHub Files)
-    with st.expander("📚 Active Reference Library"):
-        st.caption("Searching in /Regulations...")
-        found_any = False
+    # PATH INSPECTOR (For debugging your double Regulations folder)
+    with st.expander("📂 Active Path Inspector"):
+        found = False
         for root, dirs, files in os.walk("Regulations"):
             for f in files:
                 if f.endswith(".pdf"):
-                    st.write(f"✅ {f}")
-                    found_any = True
-        if not found_any:
-            st.warning("No PDFs detected. Check GitHub paths!")
+                    st.caption(f"Found: `{root}/{f}`")
+                    found = True
+        if not found: st.warning("No PDFs detected in /Regulations")
 
     st.markdown("---")
     st.markdown("### 📈 ECONOMIC FORECASTER")
@@ -50,39 +48,40 @@ uploaded_file = st.file_uploader("Upload Evidence PDF for Auditing", type="pdf")
 
 if st.button("🚀 Run Comprehensive Audit"):
     if not uploaded_file:
-        st.warning("Please upload a document!")
+        st.warning("Please upload a document to audit!")
     else:
-        with st.status("🔍 ANALYZING REGULATORY & ECONOMIC RISK...") as status:
+        with st.status("🔍 GATHERING REGULATORY & ECONOMIC CONTEXT...") as status:
             tmp_path = ""
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_path = tmp_file.name
                 
+                # Loads knowledge base recursively across all folders
                 vector_db = load_multi_knowledge_base(selected_frameworks)
                 st.session_state.vector_db = vector_db
                 
-                # Context Search - Now includes your specific "Great Divergence" keywords
-                search_query = "AI tax liability, labor displacement, productivity pay gap, Section 1701"
+                # Context Search
+                search_query = "AI tax, labor displacement, productivity pay gap, Section 1701"
                 search_docs = vector_db.similarity_search(search_query, k=25)
                 reg_context = "\n\n".join([f"(File: {d.metadata.get('source_file')}) {d.page_content}" for d in search_docs])
                 user_text = "\n\n".join([c.page_content for c in PyPDFLoader(tmp_path).load()])
                 
                 prompt = f"""
-                SYSTEM: Senior Regulatory Architect & AI Economic Consultant.
+                SYSTEM: Senior Regulatory Architect & Economic Analyst.
                 CONTEXT: {reg_context}
                 EVIDENCE: {user_text}
-                ECONOMIC ESTIMATE: {impact}
+                LIABILITY ESTIMATE: {impact}
 
                 INSTRUCTIONS:
                 1. Audit for EU AI Act / Colorado AI Act compliance.
-                2. Use the Federal docs to assess 'Robot Tax' liability.
-                3. Address the 'Great Divergence'—does this use of AI help the worker or just the company?
+                2. Use Federal docs (WH and CPA reports) to evaluate 'Robot Tax' liability.
+                3. Address the 'Great Divergence'—does this use of AI benefit workers or just the company?
 
                 OUTPUT:
                 - STATUS: (Pass/Fail)
                 - REGULATORY GAPS: (Cite legal sections)
-                - ECONOMIC IMPACT SCORE: (1-10, where 1 is Trickle-Down and 10 is Shared Abundance)
+                - ECONOMIC IMPACT SCORE: (1-10, where 1 is pure Trickle-Down and 10 is Shared Abundance)
                 - TAX LIABILITY SUMMARY: Breakdown of {impact}
                 """
                 
@@ -100,7 +99,7 @@ if st.button("🚀 Run Comprehensive Audit"):
 # --- CHAT ---
 if "final_report" in st.session_state:
     st.markdown("---")
-    if user_input := st.chat_input("Ask about the 'Productivity-Distribution Equation'..."):
+    if user_input := st.chat_input("Ask a follow-up about the 'Productivity-Distribution Equation'..."):
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"): st.markdown(user_input)
         with st.chat_message("assistant"):
