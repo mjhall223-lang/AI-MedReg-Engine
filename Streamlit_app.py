@@ -1,41 +1,30 @@
 import streamlit as st
 import os
 import tempfile
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.chat_models import ChatOllama
-from fpdf import FPDF
+from engine import get_llm, load_multi_knowledge_base, create_pdf # <--- THE CONNECTION
 
-# --- 1. CONFIG & SESSION STATE ---
+# --- 1. CONFIG ---
 st.set_page_config(page_title="ReadyAudit Engine", page_icon="⚖️", layout="wide")
 st.title("⚖️ ReadyAudit: Multi-Framework Engine")
 
-# This helps track if we are local or cloud
 is_cloud = "GROQ_API_KEY" in st.secrets
 
 if is_cloud:
-    st.info("🌐 Running in **Cloud Mode** (Powered by Groq)")
+    st.info("🌐 **Cloud Mode** | Groq Llama-3.3")
 else:
-    st.success("🔒 Running in **Secure Local Mode** (Powered by Ollama)")
+    st.success("🔒 **Local Mode** | Ollama Gemma-2")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# --- 2. SIDEBAR ---
 with st.sidebar:
     st.markdown("## 🛡️ AUDIT CONTROLS")
     st.markdown("**Lead Specialist:** Myia Hall")
     
     selected_frameworks = st.multiselect(
         "Select Framework Overlaps", 
-        [
-            "Federal Proposal (RFP Compliance)", 
-            "EU AI Act (Medical & IVDR)", 
-            "Colorado AI Act", 
-            "CMMC 2.0 (Security)",
-            "FDA PCCP (Clinical Change)"
-        ],
+        ["Federal Proposal (RFP Compliance)", "EU AI Act (Medical & IVDR)", "Colorado AI Act", "CMMC 2.0 (Security)", "FDA PCCP (Clinical Change)"],
         default=["Federal Proposal (RFP Compliance)"]
     )
     
@@ -43,10 +32,10 @@ with st.sidebar:
     
     if st.button("🗑️ Clear Chat History"):
         st.session_state.messages = []
+        if "vector_db" in st.session_state: del st.session_state.vector_db
         st.rerun()
 
-# --- 2. GITHUB MAPPING ---
-# Note: Ensure these folders exist in your GitHub repo for the Cloud version!
+# --- 3. MAPPING ---
 framework_folders = {
     "Federal Proposal (RFP Compliance)": "Regulations/Federal",
     "EU AI Act (Medical & IVDR)": "Regulations/EU",  
@@ -55,138 +44,65 @@ framework_folders = {
     "FDA PCCP (Clinical Change)": "Regulations/FDA"
 }
 
-# --- 3. CORE FUNCTIONS ---
-def get_llm():
-    """Returns the local brain if available, otherwise switches to Cloud API."""
-    if is_cloud:
-        # We use Groq for the web version because it's lightning fast
-        from langchain_groq import ChatGroq
-        return ChatGroq(
-            temperature=0, 
-            model_name="llama-3.3-70b-versatile", 
-            api_key=st.secrets["GROQ_API_KEY"]
-        )
-    else:
-        # SECURE: Talks to the Gemma brain on your Chromebook
-        return ChatOllama(model="gemma2:2b", temperature=0)
-
-def load_multi_knowledge_base(selected_list):
-    all_chunks = []
-    for framework in selected_list:
-        path = framework_folders.get(framework, ".")
-        if os.path.exists(path):
-            for f in os.listdir(path):
-                if f.endswith(".pdf"):
-                    try:
-                        loader = PyPDFLoader(os.path.join(path, f))
-                        docs = loader.load()
-                        for d in docs:
-                            d.metadata["framework"] = framework
-                        
-                        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-                        all_chunks.extend(splitter.split_documents(docs))
-                    except Exception as e:
-                        st.error(f"Error loading {f}: {e}")
-    
-    if not all_chunks:
-        return None
-    
-    # Using local embeddings (MiniLM is small and runs well anywhere)
-    return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
-
-def create_pdf(text):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "OFFICIAL MULTI-FRAMEWORK AUDIT", ln=True, align='C')
-    pdf.set_font("Arial", 'I', 10)
-    pdf.cell(0, 10, f"Lead Specialist: Myia Hall", ln=True, align='C')
-    pdf.ln(10)
-    pdf.set_font("Arial", size=11)
-    # Clean text for PDF encoding
-    safe_text = text.encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 10, txt=safe_text)
-    return bytes(pdf.output())
-
 # --- 4. AUDIT ENGINE ---
-uploaded_file = st.file_uploader("Upload Evidence or Draft (PDF)", type="pdf")
+uploaded_file = st.file_uploader("Upload Evidence (PDF)", type="pdf")
 
 if st.button("🚀 Run Multi-Framework Audit"):
     if not uploaded_file or not selected_frameworks:
         st.warning("Please upload a file and select a framework!")
     else:
-        with st.status("🔍 ANALYZING ACROSS SELECTED REGIMES...") as status:
+        with st.status("🔍 ANALYZING REGULATORY OVERLAPS...") as status:
             tmp_path = ""
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_path = tmp_file.name
                 
-                # Load user evidence
-                user_docs = PyPDFLoader(tmp_path).load()
-                user_text = "\n\n".join([c.page_content for c in user_docs])
-                
-                # Load Regulatory Knowledge Base
-                vector_db = load_multi_knowledge_base(selected_frameworks)
+                # Load context
+                vector_db = load_multi_knowledge_base(selected_frameworks, framework_folders)
                 
                 if vector_db:
                     st.session_state.vector_db = vector_db
-                    docs = vector_db.similarity_search("Mandatory requirements and compliance gaps", k=8)
+                    
+                    # 🔥 BIGGER K: Increased to 20 for the initial audit
+                    docs = vector_db.similarity_search("Definitions and mandatory requirements", k=20)
                     reg_context = "\n\n".join([f"FRAMEWORK: {d.metadata['framework']} | {d.page_content}" for d in docs])
                     
+                    user_text = "\n\n".join([c.page_content for c in PyPDFLoader(tmp_path).load()])
+                    
                     prompt = f"""
-                    SYSTEM: You are a Global Regulatory Architect and Federal Proposal Expert.
-                    FRAMEWORKS: {', '.join(selected_frameworks)}
-                    REGULATORY CONTEXT: {reg_context}
+                    SYSTEM: Global Regulatory Architect. Answer using context.
+                    CONTEXT: {reg_context}
                     EVIDENCE: {user_text}
-
-                    TASK:
-                    1. STATUS: Pass/Fail for each framework.
-                    2. SCORE: Aggregate score (0-10). 
-                    3. OVERLAP: Does a gap in one framework cause a failure in another?
-                    4. GAPS: Cite specific requirements.
-                    5. {'REMEDIATION: Provide unified draft language.' if service_tier == 'Premium Remediation' else 'List missing items.'}
+                    TASK: Status (Pass/Fail), Score (0-10), Overlap Conflicts, GAPS (Cite Sections), {'REMEDIATION: Draft language' if service_tier == 'Premium Remediation' else 'List missing items'}.
                     """
                     
-                    llm = get_llm()
-                    if llm:
-                        response = llm.invoke(prompt)
-                        report = response.content
-                        st.session_state.final_report = report
-                        status.update(label="✅ Audit Complete!", state="complete")
-                        
-                        st.error("### 📜 AUDIT FINDINGS")
-                        st.markdown(report)
-                        st.download_button("📄 Export PDF", create_pdf(report), file_name="Audit_Report.pdf")
-                else:
-                    st.error("Knowledge base could not be loaded. Ensure PDF folders exist.")
-            
+                    report = get_llm(is_cloud, st.secrets).invoke(prompt).content
+                    st.session_state.final_report = report
+                    status.update(label="✅ Audit Complete!", state="complete")
+                    
+                    st.error("### 📜 AUDIT FINDINGS")
+                    st.markdown(report)
+                    st.download_button("📄 Export PDF", create_pdf(report), file_name="Audit_Report.pdf")
             finally:
-                if tmp_path and os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+                if tmp_path and os.path.exists(tmp_path): os.remove(tmp_path)
 
-# --- 5. INTERACTIVE CHAT ---
+# --- 5. CHAT ---
 if "final_report" in st.session_state:
     st.markdown("---")
-    st.subheader("💬 Ask about Framework Overlaps")
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    st.subheader("💬 Ask about Overlaps")
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-    if user_input := st.chat_input("Ex: Does our technical draft satisfy Section L?"):
+    if user_input := st.chat_input("Ex: What is the definition of High-Risk?"):
         st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
+        with st.chat_message("user"): st.markdown(user_input)
 
         with st.chat_message("assistant"):
-            if "vector_db" in st.session_state:
-                context_docs = st.session_state.vector_db.similarity_search(user_input, k=4)
-                context_text = "\n\n".join([f"({d.metadata['framework']}) {d.page_content}" for d in context_docs])
-                
-                llm = get_llm()
-                if llm:
-                    response = llm.invoke(f"CONTEXT: {context_text}\nQUESTION: {user_input}")
-                    st.markdown(response.content)
-                    st.session_state.messages.append({"role": "assistant", "content": response.content})
-            else:
-                st.write("Please run the audit first to initialize the knowledge base.")
+            # 🔥 BIGGER K: Increased to 12 for the follow-up chat
+            context_docs = st.session_state.vector_db.similarity_search(user_input, k=12)
+            context_text = "\n\n".join([f"({d.metadata['framework']}) {d.page_content}" for d in context_docs])
+            
+            response = get_llm(is_cloud, st.secrets).invoke(f"CONTEXT: {context_text}\nUSER: {user_input}").content
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
