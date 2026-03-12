@@ -16,12 +16,21 @@ if "messages" not in st.session_state:
 with st.sidebar:
     st.markdown("## 🛡️ AUDIT CONTROLS")
     st.markdown("**Lead Specialist:** Myia Hall")
+    
+    # 1. Added "Federal Proposal" as a default to include your new PDFs
     selected_frameworks = st.multiselect(
         "Active Frameworks", 
         ["Federal Proposal", "EU AI Act", "Colorado AI Act", "CMMC 2.0", "FDA PCCP"],
-        default=["EU AI Act", "Colorado AI Act"]
+        default=["Federal Proposal", "EU AI Act", "Colorado AI Act"]
     )
+    
+    # 2. Reference Library Monitor (Visual confirmation of your uploads)
+    with st.expander("📚 Reference Library"):
+        st.caption("Active Federal Docs:")
+        st.code("WH_AI_Great_Divergence_2026.pdf\nTX_CPA_AI_Tax_Compliance_P2.pdf")
+
     service_tier = st.radio("Audit Depth:", ["Standard Scan", "Premium Remediation"])
+    
     if st.button("🗑️ Reset Engine"):
         st.session_state.messages = []
         if "vector_db" in st.session_state: del st.session_state.vector_db
@@ -50,27 +59,32 @@ if st.button("🚀 Run Multi-Framework Audit"):
                 else:
                     st.session_state.vector_db = vector_db
                     
-                    # Increased k=25 for maximum legal coverage
-                    search_docs = vector_db.similarity_search("Definitions of High-Risk, Section 1701, Article 6, and compliance requirements", k=25)
+                    # 3. Expanded search query to include the new Federal Tax/Economic logic
+                    search_query = """
+                    Definitions of High-Risk, Section 1701, Article 6, 
+                    AI tax compliance, digital payroll taxes, and labor displacement metrics
+                    """
+                    search_docs = vector_db.similarity_search(search_query, k=25)
                     reg_context = "\n\n".join([f"(File: {d.metadata.get('source_file')}) {d.page_content}" for d in search_docs])
                     
                     user_text = "\n\n".join([c.page_content for c in PyPDFLoader(tmp_path).load()])
                     
-                    # Enhanced System Instruction
+                    # 4. Enhanced System Instruction with Federal Tax Logic
                     prompt = f"""
-                    SYSTEM: You are a Senior Regulatory Architect. 
+                    SYSTEM: You are a Senior Regulatory Architect and Economic Policy Analyst. 
                     CONTEXT: {reg_context}
                     EVIDENCE: {user_text}
 
                     INSTRUCTIONS:
                     - Search specifically for definitions in Colorado SB 24-205 Section 6-1-1701.
                     - Search specifically for EU AI Act Article 6.
-                    - Compare the evidence against these specific definitions.
+                    - Identify potential "Digital Payroll Tax" liabilities or "Great Divergence" labor impacts based on the Federal Proposal docs.
+                    - Compare the evidence against these specific definitions and economic frameworks.
                     
                     OUTPUT:
                     1. STATUS: (Pass/Fail)
                     2. SCORE: (0-10)
-                    3. GAPS: (Cite legal sections)
+                    3. GAPS: (Cite legal sections AND potential tax/economic liabilities)
                     4. REMEDIATION: {'Provide specific draft language' if service_tier == 'Premium Remediation' else 'List missing items'}.
                     """
                     
@@ -94,12 +108,11 @@ if "final_report" in st.session_state:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-    if user_input := st.chat_input("Ask a follow-up..."):
+    if user_input := st.chat_input("Ask about tax compliance or follow-ups..."):
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"): st.markdown(user_input)
 
         with st.chat_message("assistant"):
-            # k=15 for chat follow-ups
             context_docs = st.session_state.vector_db.similarity_search(user_input, k=15)
             context_text = "\n\n".join([d.page_content for d in context_docs])
             resp = get_llm(is_cloud, st.secrets).invoke(f"CONTEXT: {context_text}\nUSER: {user_input}").content
