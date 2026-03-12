@@ -1,10 +1,11 @@
 streamlit
-langchain-groq
+langchain
 langchain-community
-pypdf
+langchain-groq
+langchain-huggingface
 langchain-text-splitters
+pypdf
 faiss-cpu
 sentence-transformers
-langchain-huggingface
 pandas
 fpdf2
