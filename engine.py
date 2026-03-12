@@ -6,6 +6,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.chat_models import ChatOllama
 from fpdf import FPDF
 
+# 1. HYBRID LLM SWITCH
 def get_llm(is_cloud, st_secrets):
     if is_cloud:
         from langchain_groq import ChatGroq
@@ -16,35 +17,33 @@ def get_llm(is_cloud, st_secrets):
         )
     return ChatOllama(model="gemma2:2b", temperature=0)
 
+# 2. SMART-SCAN KNOWLEDGE BASE
 def load_multi_knowledge_base(selected_list, root_folder="Regulations"):
-    """
-    Scans the ENTIRE Regulations folder and all subfolders 
-    to find any PDF files that match your selected frameworks.
-    """
+    """Scans all subfolders in /Regulations to find PDFs."""
     all_chunks = []
     
     if not os.path.exists(root_folder):
         return None
 
-    # This 'walks' through every single folder in your GitHub Regulations directory
+    # Walk through the directory to find every PDF
     for root, dirs, files in os.walk(root_folder):
         for file in files:
             if file.endswith(".pdf"):
-                # Check if the filename or the folder name matches what the user selected
-                # This makes the search very 'forgiving'
                 full_path = os.path.join(root, file)
                 try:
                     loader = PyPDFLoader(full_path)
                     docs = loader.load()
                     
-                    # Label the context so the AI knows which file it's reading
                     for d in docs:
                         d.metadata["source_file"] = file
                     
-                    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+                    # Optimization: Larger overlap ensures legal definitions stay intact
+                    splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=1200, 
+                        chunk_overlap=250
+                    )
                     all_chunks.extend(splitter.split_documents(docs))
-                except Exception as e:
-                    print(f"Error loading {file}: {e}")
+                except Exception:
                     continue
     
     if not all_chunks:
@@ -52,11 +51,12 @@ def load_multi_knowledge_base(selected_list, root_folder="Regulations"):
     
     return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
 
+# 3. PDF GENERATOR
 def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "READY-AUDIT COMPLIANCE REPORT", ln=True, align='C')
+    pdf.cell(0, 10, "READY-AUDIT: REGULATORY COMPLIANCE REPORT", ln=True, align='C')
     pdf.set_font("Arial", size=11)
     safe_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, txt=safe_text)
