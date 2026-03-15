@@ -7,5 +7,5 @@ faiss-cpu
 pypdf
 fpdf
 beautifulsoup4
-tavily-python
 requests
+tavily-python
