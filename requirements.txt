@@ -3,7 +3,7 @@ langchain
 langchain-groq
 langchain-huggingface
 langchain-community
-ddgs>=9.11.3
+duckduckgo-search>=7.5.3
 pypdf
 fpdf2
 faiss-cpu
