@@ -1,7 +1,5 @@
 import os
-import requests
 import streamlit as st
-from bs4 import BeautifulSoup
 from fpdf import FPDF
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -10,19 +8,13 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 def get_llm(is_cloud, st_secrets):
-    """Initializes the LLM based on the environment."""
     if is_cloud and st_secrets.get("GROQ_API_KEY"):
         from langchain_groq import ChatGroq
-        return ChatGroq(
-            temperature=0, 
-            model_name="llama-3.3-70b-versatile", 
-            api_key=st_secrets["GROQ_API_KEY"]
-        )
+        return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
     from langchain_community.chat_models import ChatOllama
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def load_selected_docs(active_files, root_folder="Regulations"):
-    """Creates a vector database from the chosen PDF regulations."""
     all_chunks = []
     if not active_files: return None
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
@@ -31,33 +23,31 @@ def load_selected_docs(active_files, root_folder="Regulations"):
             if file in active_files:
                 try:
                     loader = PyPDFLoader(os.path.join(root, file))
-                    docs = loader.load()
-                    all_chunks.extend(splitter.split_documents(docs))
+                    all_chunks.extend(splitter.split_documents(loader.load()))
                 except: continue
     if not all_chunks: return None
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    return FAISS.from_documents(all_chunks, embeddings)
+    return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
 
 def find_and_scrape_company(company_name, tavily_key=None):
-    """Performs a web search for company disclosures."""
     if not tavily_key: return "Manual verification required: No search API key found."
     try:
         os.environ["TAVILY_API_KEY"] = tavily_key
         search = TavilySearchResults(k=3)
-        query = f"{company_name} AI safety policy medical device compliance"
+        # 2026 Targeted Search: Finds specific products like 'Chiral' or 'Science Foundry'
+        query = f"{company_name} 2026 AI products foundation models compliance"
         return str(search.run(query))
     except Exception as e:
-        return f"Search unavailable: {str(e)}"
+        return f"Search error: {str(e)}"
 
 class EconomicImpact:
     @staticmethod
     def calculate_liability(token_usage=0, replaced_staff=0):
+        # 2026 Colorado AI Act Penalties: Up to $20k per violation
         token_tax = (token_usage / 1000) * 0.0005
-        payroll_tax = (replaced_staff * 60000) * 0.15
-        return {"total": round(token_tax + payroll_tax, 2)}
+        automation_risk = replaced_staff * 20000 
+        return {"total": round(token_tax + automation_risk, 2)}
 
 def create_pdf(text, title="READY-AUDIT CERTIFIED REPORT"):
-    """Generates PDF bytes for download."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
