@@ -1,11 +1,11 @@
 streamlit
 langchain
-langchain-community
 langchain-groq
 langchain-huggingface
-langchain-text-splitters
-pypdf
+langchain-community
 faiss-cpu
-sentence-transformers
-pandas
-fpdf2
+pypdf
+fpdf
+beautifulsoup4
+tavily-python
+requests
