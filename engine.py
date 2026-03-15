@@ -10,20 +10,20 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 def get_llm(is_cloud, st_secrets):
-    """Switches between Cloud (Groq) and Local (Ollama) automatically."""
-    if is_cloud and "GROQ_API_KEY" in st_secrets:
+    """Initializes the LLM based on environment."""
+    if is_cloud and st_secrets.get("GROQ_API_KEY"):
         from langchain_groq import ChatGroq
         return ChatGroq(
             temperature=0, 
             model_name="llama-3.3-70b-versatile", 
             api_key=st_secrets["GROQ_API_KEY"]
         )
-    # Fallback for local development
+    # Local fallback
     from langchain_community.chat_models import ChatOllama
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def load_selected_docs(active_files, root_folder="Regulations"):
-    """Builds the Knowledge Base from selected PDFs."""
+    """Builds the searchable knowledge base from selected PDFs."""
     all_chunks = []
     if not active_files: return None
     
@@ -35,27 +35,24 @@ def load_selected_docs(active_files, root_folder="Regulations"):
                     loader = PyPDFLoader(os.path.join(root, file))
                     docs = loader.load()
                     all_chunks.extend(splitter.split_documents(docs))
-                except Exception: continue
+                except: continue
                 
     if not all_chunks: return None
-    # 'sentence-transformers' must be in requirements.txt for this line
+    # Ensure 'sentence-transformers' is in requirements.txt
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     return FAISS.from_documents(all_chunks, embeddings)
 
 def find_and_scrape_company(company_name, tavily_key=None):
-    """Finds lead data using Tavily Search or basic web scraping."""
+    """Scrapes company data from the web using Tavily."""
     try:
-        if tavily_key:
-            os.environ["TAVILY_API_KEY"] = tavily_key
-            search = TavilySearchResults(k=2)
-            query = f"{company_name} AI transparency policy terms of service"
-            results = search.run(query)
-            return "\n".join([str(res) for res in results])
-        
-        # Fallback to simple Google-style search if no Tavily key
-        return f"Lead Search for {company_name} initiated. Manual verification recommended."
+        if not tavily_key: return "Please add TAVILY_API_KEY to secrets for scouting."
+        os.environ["TAVILY_API_KEY"] = tavily_key
+        search = TavilySearchResults(k=2)
+        query = f"{company_name} AI transparency policy or medical device compliance"
+        results = search.run(query)
+        return str(results)
     except Exception as e:
-        return f"Search Error: {str(e)}"
+        return f"Search failed: {str(e)}"
 
 class EconomicImpact:
     @staticmethod
@@ -65,12 +62,14 @@ class EconomicImpact:
         return {"total": round(token_tax + payroll_tax, 2)}
 
 def create_pdf(text, title="READY-AUDIT CERTIFIED REPORT"):
+    """Generates PDF bytes correctly for Streamlit's download button."""
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
+    pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, title, ln=True, align='C')
-    pdf.set_font("Arial", size=11)
-    # Clean text for PDF encoding
-    clean = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'")
+    pdf.ln(5)
+    pdf.set_font("Helvetica", size=11)
+    # Clean text to avoid encoding crashes
+    clean = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
     pdf.multi_cell(0, 10, txt=clean.encode('latin-1', 'replace').decode('latin-1'))
-    return bytes(pdf.output())
+    return pdf.output()
