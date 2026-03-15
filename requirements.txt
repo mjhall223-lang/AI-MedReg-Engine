@@ -3,8 +3,8 @@ langchain
 langchain-groq
 langchain-huggingface
 langchain-community
+duckduckgo-search>=6.0.0
 pypdf
 fpdf
-tavily-python
 faiss-cpu
 sentence-transformers
