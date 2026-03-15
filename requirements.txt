@@ -3,13 +3,8 @@ langchain
 langchain-groq
 langchain-huggingface
 langchain-community
-faiss-cpu
 pypdf
 fpdf
-beautifulsoup4
-requests
 tavily-python
+faiss-cpu
 sentence-transformers
-transformers
-torch
-python-magic
