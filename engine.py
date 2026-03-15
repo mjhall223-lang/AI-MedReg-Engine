@@ -6,8 +6,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-# 2026 Update: Importing from the new ddgs library
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 
 def get_llm(is_cloud, st_secrets):
     if is_cloud and st_secrets.get("GROQ_API_KEY"):
@@ -17,18 +16,19 @@ def get_llm(is_cloud, st_secrets):
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def extract_headcount(text, llm):
-    """Sifts news for the 'Beast Number' (e.g., 4,000 layoffs or 50 patients)."""
-    prompt = f"Identify the specific number of people affected or trial participants in this text: {text[:2000]}. Output ONLY the digits."
+    """SIFTER: Finds the headcount number (e.g., 4000 layoffs or 50 patients)."""
+    prompt = f"Extract only the number of people affected (headcount/participants) from this news: {text[:2500]}. Output only digits."
     response = llm.invoke(prompt).content
     number = re.sub(r"\D", "", response)
-    return int(number) if (number and 0 < len(number) < 8) else 10
+    # Default to 10 if sift fails or number is unrealistic
+    return int(number) if (number and 0 < len(number) < 7) else 10
 
 def find_and_scrape_live_news(company_name):
-    """2026 Stable Search: Sifts headlines for Synchron and Block leads."""
+    """STABLE SEARCH: Sifts March 2026 headlines for liability triggers."""
     try:
-        # Using the new DDGS syntax
         with DDGS() as ddgs:
-            query = f"March 2026 {company_name} AI automation layoffs clinical trial participants"
+            # Targets 2026 restructuring and BCI enrollment specifically
+            query = f"March 2026 {company_name} AI automation layoffs clinical trial enrollment"
             results = list(ddgs.text(query, max_results=5))
             return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
     except Exception as e:
@@ -51,6 +51,7 @@ def load_selected_docs(active_files, root_folder="Regulations"):
 class EconomicImpact:
     @staticmethod
     def calculate_liability(replaced_staff=0):
+        # Colorado SB 24-205 standard: $20,000 per violation
         statutory = replaced_staff * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
@@ -58,7 +59,6 @@ def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
-    # Sanitize for latin-1 encoding
     clean = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
     pdf.multi_cell(0, 10, txt=clean.encode('latin-1', 'replace').decode('latin-1'))
     return pdf.output()
