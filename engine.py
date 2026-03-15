@@ -10,6 +10,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 def get_llm(is_cloud, st_secrets):
+    """Initializes the LLM based on the environment."""
     if is_cloud and st_secrets.get("GROQ_API_KEY"):
         from langchain_groq import ChatGroq
         return ChatGroq(
@@ -21,6 +22,7 @@ def get_llm(is_cloud, st_secrets):
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def load_selected_docs(active_files, root_folder="Regulations"):
+    """Creates a vector database from the chosen PDF regulations."""
     all_chunks = []
     if not active_files: return None
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
@@ -37,15 +39,15 @@ def load_selected_docs(active_files, root_folder="Regulations"):
     return FAISS.from_documents(all_chunks, embeddings)
 
 def find_and_scrape_company(company_name, tavily_key=None):
+    """Performs a web search for company disclosures."""
+    if not tavily_key: return "Manual verification required: No search API key found."
     try:
-        if not tavily_key: return "Technical Note: No Tavily Key provided. Manual search required."
         os.environ["TAVILY_API_KEY"] = tavily_key
         search = TavilySearchResults(k=3)
-        query = f"{company_name} AI ethics policy medical device compliance disclosures"
-        results = search.run(query)
-        return str(results)
+        query = f"{company_name} AI safety policy medical device compliance"
+        return str(search.run(query))
     except Exception as e:
-        return f"Technical Note: Search failed - {str(e)}"
+        return f"Search unavailable: {str(e)}"
 
 class EconomicImpact:
     @staticmethod
@@ -55,6 +57,7 @@ class EconomicImpact:
         return {"total": round(token_tax + payroll_tax, 2)}
 
 def create_pdf(text, title="READY-AUDIT CERTIFIED REPORT"):
+    """Generates PDF bytes for download."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
