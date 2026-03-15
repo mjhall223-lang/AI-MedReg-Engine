@@ -12,3 +12,4 @@ tavily-python
 sentence-transformers
 transformers
 torch
+python-magic
