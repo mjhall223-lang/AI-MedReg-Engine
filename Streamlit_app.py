@@ -10,37 +10,42 @@ st.title("⚖️ ReadyAudit: Multi-Framework Remediation Engine")
 
 is_cloud = "GROQ_API_KEY" in st.secrets
 
-# Construction order matters to prevent UI vanishing
+# 1. SIDEBAR: Keep this simple so it doesn't crash
 with st.sidebar:
     st.markdown("## 🛡️ AUDIT CONTROLS")
     st.markdown(f"**Specialist:** Myia Hall")
     st.markdown("---")
 
-    # DB STATUS with error handling
-    try:
-        db, files_found = load_multi_knowledge_base()
-        if files_found:
-            st.success(f"📚 {len(files_found)} PDFs Indexed")
-            with st.expander("Manifest"):
-                for f in files_found: st.text(f"📄 {f}")
-        else:
-            st.warning("⚠️ No PDFs found in 'Regulations/'")
-    except:
-        st.error("Engine path error.")
-        db, files_found = None, []
+    # Only load DB when requested to prevent sidebar vanishing
+    if st.button("🔄 Sync Knowledge Base"):
+        with st.spinner("Crawling folders..."):
+            db, files = load_multi_knowledge_base()
+            if files:
+                st.session_state.db = db
+                st.session_state.files = files
+                st.success(f"Indexed {len(files)} PDFs")
+            else:
+                st.error("No PDFs found in 'Regulations/'")
+
+    if "files" in st.session_state:
+        with st.expander("Active Manifest"):
+            for f in st.session_state.files: st.text(f"📄 {f}")
 
     st.markdown("---")
     st.markdown("### 📈 FORECASTER")
-    est_tokens = st.number_input("Est. Monthly Tokens (M):", value=50.0)
-    est_replaced = st.number_input("Roles Replaced:", value=50)
-    impact = EconomicImpact.calculate_liability(token_usage=est_tokens*1000000, replaced_staff=est_replaced)
+    tokens = st.number_input("Est. Monthly Tokens (M):", value=50.0)
+    replaced = st.number_input("Roles Replaced:", value=50)
+    impact = EconomicImpact.calculate_liability(token_usage=tokens*1000000, replaced_staff=replaced)
     st.metric("Tax Liability", f"${impact['total']:,}")
 
+# 2. MAIN BODY
 uploaded_file = st.file_uploader("Upload Evidence PDF", type="pdf")
 
 if st.button("🚀 Run Comprehensive Audit"):
-    if not uploaded_file or not db:
-        st.error("Database missing or no upload found.")
+    if not uploaded_file:
+        st.error("Please upload a file first.")
+    elif "db" not in st.session_state:
+        st.error("Please click 'Sync Knowledge Base' in the sidebar first!")
     else:
         with st.status("🔍 CROSS-REFERENCING...") as status:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -52,8 +57,7 @@ if st.button("🚀 Run Comprehensive Audit"):
             user_text = "\n\n".join([c.page_content for c in chunks[:10]])
             
             # Fetch Context
-            search_query = "EU IVDR Article 10, Article 14, SB24-205 reasonable care"
-            search_docs = db.similarity_search(search_query, k=8)
+            search_docs = st.session_state.db.similarity_search("AI high risk, oversight, bias", k=8)
             reg_context = "\n\n".join([f"(Doc: {d.metadata.get('source_file')}) {d.page_content}" for d in search_docs])
 
             prompt = f"""
@@ -62,9 +66,8 @@ if st.button("🚀 Run Comprehensive Audit"):
             EVIDENCE: {user_text}
             TAX: {impact['total']}
             
-            REPORT:
-            PART 1: AUDIT (Score 1-10. 1-4 is safe/compliant, 8-10 is high-risk).
-            PART 2: REMEDIATION (Mandatory Worker Clause if score > 5).
+            PART 1: AUDIT (1-10 Score. 1-4 is safe, 8-10 is high-risk).
+            PART 2: REMEDIATION (Worker Clause if score > 5).
             """
             
             report = get_llm(is_cloud, st.secrets).invoke(prompt).content
@@ -74,3 +77,4 @@ if st.button("🚀 Run Comprehensive Audit"):
             with col1: st.error("### 📜 AUDIT"); st.markdown(report.split("PART 2:")[0])
             with col2: st.success("### 🛠️ STRATEGY"); st.markdown(report.split("PART 2:")[1] if "PART 2:" in report else "Compliant.")
             os.remove(tmp_path)
+            
