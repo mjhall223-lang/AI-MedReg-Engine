@@ -16,49 +16,33 @@ def get_llm(is_cloud, st_secrets):
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def extract_headcount(text, llm):
-    """SIFTER: Finds the headcount number (e.g., 4000 layoffs or 50 patients)."""
-    prompt = f"Extract only the number of people affected (headcount/participants) from this news: {text[:2500]}. Output only digits."
+    """SIFTER: Finds the 2026 'Beast Number' (e.g. 4000 for Block)."""
+    prompt = f"Analyze March 2026 news: {text[:2500]}. Find the specific number of employees laid off or trial participants. Output ONLY the integer."
     response = llm.invoke(prompt).content
     number = re.sub(r"\D", "", response)
-    # Default to 10 if sift fails or number is unrealistic
-    return int(number) if (number and 0 < len(number) < 7) else 10
+    return int(number) if (number and 0 < len(number) < 8) else 10
 
 def find_and_scrape_live_news(company_name):
-    """STABLE SEARCH: Sifts March 2026 headlines for liability triggers."""
     try:
         with DDGS() as ddgs:
-            # Targets 2026 restructuring and BCI enrollment specifically
-            query = f"March 2026 {company_name} AI automation layoffs clinical trial enrollment"
+            # Sifts for the actual Dorsey restructuring or Synchron COMMAND trial data
+            query = f"March 2026 {company_name} AI automation layoffs BCI enrollment news"
             results = list(ddgs.text(query, max_results=5))
             return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
-    except Exception as e:
-        return f"Sifting failed. Error: {e}"
-
-def load_selected_docs(active_files, root_folder="Regulations"):
-    all_chunks = []
-    if not active_files: return None
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    for file in active_files:
-        f_path = os.path.join(root_folder, file)
-        if os.path.exists(f_path):
-            try:
-                loader = PyPDFLoader(f_path)
-                all_chunks.extend(splitter.split_documents(loader.load()))
-            except: continue
-    if not all_chunks: return None
-    return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
+    except: return "Search failed."
 
 class EconomicImpact:
     @staticmethod
-    def calculate_liability(replaced_staff=0):
-        # Colorado SB 24-205 standard: $20,000 per violation
-        statutory = replaced_staff * 20000 
+    def calculate_liability(headcount=0):
+        # Statutory: $20,000 per violation (CO SB 24-205)
+        statutory = headcount * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
 def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=11)
+    # Cleaning for FPDF encoding
     clean = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
     pdf.multi_cell(0, 10, txt=clean.encode('latin-1', 'replace').decode('latin-1'))
     return pdf.output()
