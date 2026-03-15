@@ -8,6 +8,7 @@ st.title("⚖️ ReadyAudit: Multi-Framework Remediation")
 
 is_cloud = st.secrets.get("GROQ_API_KEY") is not None
 
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info(f"User: Myia Hall | Mode: {'Cloud' if is_cloud else 'Local'}")
@@ -42,10 +43,10 @@ with tab1:
                     t_path = tmp.name
                 
                 from langchain_community.document_loaders import PyPDFLoader
-                evidence = "\n".join([p.page_content for p in PyPDFLoader(t_path).load()[:10]])
+                evidence = "\n".join([p.page_content for p in PyPDFLoader(t_path).load()[:5]])
                 regs = "\n".join([d.page_content for d in db.similarity_search(evidence, k=3)])
                 
-                prompt = f"Audit the following evidence against the provided regulations. Identify gaps and provide remediation steps.\n\nREGULATIONS:\n{regs}\n\nEVIDENCE:\n{evidence}"
+                prompt = f"Conduct a regulatory audit. Use these regulations: {regs}. Evaluate this evidence: {evidence}. Focus on gaps."
                 report = get_llm(is_cloud, st.secrets).invoke(prompt).content
                 st.session_state.report = report
                 st.markdown(report)
@@ -58,24 +59,16 @@ with tab2:
         if not selected_files:
             st.error("Select regulations in the sidebar.")
         else:
-            with st.status("Scouting public disclosures...") as s:
+            with st.status("Gathering public data...") as s:
                 web_data = find_and_scrape_company(co_name, st.secrets.get("TAVILY_API_KEY"))
                 db = load_selected_docs(selected_files)
-                regs = "\n".join([d.page_content for d in db.similarity_search("transparency and liability", k=3)])
+                regs = "\n".join([d.page_content for d in db.similarity_search("liability and transparency", k=3)])
                 
-                # REFINED PROMPT: No technical instructions included.
-                prompt = f"""
-                You are a Regulatory Specialist. Draft a professional cold pitch to {co_name}. 
-                Use the following web data and regulatory requirements to identify specific gaps.
+                prompt = f"""You are a Regulatory Specialist. Draft a cold pitch to {co_name} based on compliance gaps.
+                Use this context: {regs} and this web data: {web_data}.
+                Be professional. Focus on risk mitigation and consumer protection. 
+                Do not include any technical meta-talk or mentions of system settings."""
                 
-                REGULATORY REQUIREMENTS:
-                {regs}
-                
-                WEB DATA FOUND:
-                {web_data}
-                
-                Focus on liability, transparency, and consumer protection. Do not mention API keys or technical settings.
-                """
                 report = get_llm(is_cloud, st.secrets).invoke(prompt).content
                 st.session_state.report = report
                 st.markdown(report)
