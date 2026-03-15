@@ -15,16 +15,16 @@ def get_llm(is_cloud, st_secrets):
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def load_multi_knowledge_base(root_folder="Regulations"):
-    """Fixed: Now crawls ALL PDFs in Regulations without requiring specific subfolder names."""
+    """Deep-crawls all subdirectories to find every PDF, no matter how messy the folders are."""
     all_chunks = []
     indexed_files = []
     
     if not os.path.exists(root_folder):
-        os.makedirs(root_folder) # Create it if it doesn't exist
         return None, []
         
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
     
+    # Walk through ALL subfolders
     for root, dirs, files in os.walk(root_folder):
         for file in files:
             if file.endswith(".pdf"):
