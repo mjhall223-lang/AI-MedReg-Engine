@@ -3,94 +3,75 @@ import os
 import tempfile
 from engine import get_llm, load_selected_docs, find_and_scrape_company, EconomicImpact, create_pdf
 
-# Config MUST be first
-st.set_page_config(page_title="ReadyAudit Engine", page_icon="⚖️", layout="wide")
-st.title("⚖️ ReadyAudit: Multi-Framework Remediation Engine")
+st.set_page_config(page_title="ReadyAudit Engine", layout="wide")
+st.title("⚖️ ReadyAudit: Multi-Framework Remediation")
 
-is_cloud = "GROQ_API_KEY" in st.secrets
+# --- CLOUD DETECTION ---
+is_cloud = st.secrets.get("GROQ_API_KEY") is not None
 
-# --- 1. THE SIDEBAR (ALWAYS VISIBLE) ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("## 🛡️ AUDIT CONTROLS")
-    st.markdown(f"**Specialist:** Myia Hall")
-    st.markdown("---")
-
-    # Dynamic File Toggles
+    st.header("🛡️ SPECIALIST PANEL")
+    st.info(f"User: Myia Hall | Mode: {'Cloud' if is_cloud else 'Local'}")
+    
+    st.markdown("### 📜 KNOWLEDGE BASE")
     all_pdfs = []
     if os.path.exists("Regulations"):
-        for root, _, files in os.walk("Regulations"):
-            for file in files:
-                if file.endswith(".pdf"): all_pdfs.append(file)
-
-    if all_pdfs:
-        st.markdown("### 📜 ACTIVE KNOWLEDGE BASE")
-        selected_files = []
-        for f in sorted(list(set(all_pdfs))): 
-            # Use keys to prevent UI reset when switching tabs
-            if st.checkbox(f"📄 {f}", value=True, key=f"toggle_{f}"):
-                selected_files.append(f)
-        st.session_state.selected_files = selected_files
-    else:
-        st.error("No PDFs found in 'Regulations/'")
-
+        for r, _, f_list in os.walk("Regulations"):
+            for f in f_list:
+                if f.endswith(".pdf"): all_pdfs.append(f)
+    
+    selected_files = []
+    for f in sorted(list(set(all_pdfs))):
+        if st.checkbox(f"📄 {f}", value=True, key=f"kb_{f}"):
+            selected_files.append(f)
+    
     st.markdown("---")
-    st.markdown("### 📈 ECONOMIC FORECASTER")
-    tokens = st.number_input("Est. Monthly Tokens (M):", value=50.0)
-    replaced = st.number_input("Roles Replaced:", value=50)
-    impact = EconomicImpact.calculate_liability(token_usage=tokens*1000000, replaced_staff=replaced)
-    st.metric("Tax Liability", f"${impact['total']:,}")
-    st.session_state.impact_total = impact['total']
+    st.markdown("### 📈 ROBOT TAX FORECASTER")
+    tokens = st.number_input("Monthly Tokens (M):", value=50.0)
+    replaced = st.number_input("Roles Impacted:", value=10)
+    impact = EconomicImpact.calculate_liability(tokens*1000000, replaced)
+    st.metric("Total Liability", f"${impact['total']:,}")
 
-# --- 2. THE TABS (MAIN CONTENT) ---
-tab1, tab2 = st.tabs(["📁 Manual Audit", "🤖 Autonomous Scout"])
+# --- MAIN INTERFACE ---
+tab1, tab2 = st.tabs(["📁 Document Audit", "🤖 Autonomous Scout"])
 
 with tab1:
-    uploaded_file = st.file_uploader("Upload Project Evidence", type="pdf")
-    if st.button("🚀 Run Manual Audit"):
-        if not uploaded_file or not st.session_state.get('selected_files'):
-            st.error("Missing Evidence or Knowledge Base Toggles.")
+    uploaded = st.file_uploader("Upload Evidence PDF", type="pdf")
+    if st.button("🚀 Run Analysis"):
+        if not uploaded or not selected_files:
+            st.error("Select regulations and upload evidence.")
         else:
-            with st.status("🔍 ANALYZING GAPS...") as status:
-                db = load_selected_docs(st.session_state.selected_files)
+            with st.status("Analyzing...") as s:
+                db = load_selected_docs(selected_files)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                    tmp.write(uploaded_file.getvalue())
-                    tmp_path = tmp.name
+                    tmp.write(uploaded.getvalue())
+                    t_path = tmp.name
                 
-                # Logic for Audit
+                # Simple extraction & similarity search
                 from langchain_community.document_loaders import PyPDFLoader
-                loader = PyPDFLoader(tmp_path)
-                evidence_text = "\n\n".join([c.page_content for c in loader.load()[:10]])
-                search_docs = db.similarity_search("human oversight, bias", k=5)
-                reg_context = "\n".join([d.page_content for d in search_docs])
+                evidence = "\n".join([p.page_content for p in PyPDFLoader(t_path).load()[:5]])
+                regs = "\n".join([d.page_content for d in db.similarity_search(evidence, k=3)])
                 
-                prompt = f"Perform Audit. REGS: {reg_context} EVIDENCE: {evidence_text} TAX: {st.session_state.impact_total}"
+                prompt = f"Audit this AI project evidence against these regulations. REGS: {regs} EVIDENCE: {evidence}"
                 report = get_llm(is_cloud, st.secrets).invoke(prompt).content
-                st.session_state.final_report = report
+                st.session_state.report = report
                 st.markdown(report)
-                os.remove(tmp_path)
 
 with tab2:
-    st.header("Lead Scout: Autonomous Gap Analysis")
-    target_company = st.text_input("Enter Company Name (e.g., 'Neuralink')")
-    
-    if st.button("🔍 Find, Scrape, & Audit"):
-        if not st.session_state.get('selected_files'):
-            st.error("Select at least one Regulation in the sidebar first!")
-        else:
-            with st.status("Searching for public AI disclosures...") as status:
-                evidence = find_and_scrape_company(target_company)
-                if not evidence:
-                    st.error("Could not find public data.")
-                else:
-                    db = load_selected_docs(st.session_state.selected_files)
-                    search_docs = db.similarity_search("oversight, transparency", k=5)
-                    reg_context = "\n".join([d.page_content for d in search_docs])
-                    
-                    prompt = f"Scout Audit for {target_company}. REGS: {reg_context} POLICY: {evidence}"
-                    report = get_llm(is_cloud, st.secrets).invoke(prompt).content
-                    st.session_state.final_report = report
-                    st.markdown(report)
+    st.header("Lead Scout: Auto-Prospecting")
+    co_name = st.text_input("Company to Audit:")
+    if st.button("🔍 Scout & Pitch"):
+        with st.status("Scouting Web...") as s:
+            t_key = st.secrets.get("TAVILY_API_KEY")
+            web_data = find_and_scrape_company(co_name, t_key)
+            db = load_selected_docs(selected_files)
+            regs = "\n".join([d.page_content for d in db.similarity_search("transparency", k=3)])
+            
+            prompt = f"Draft a cold pitch to {co_name} based on these regulations: {regs}. Web Data: {web_data}"
+            report = get_llm(is_cloud, st.secrets).invoke(prompt).content
+            st.session_state.report = report
+            st.markdown(report)
 
-# --- 3. DOWNLOAD FOOTER ---
-if "final_report" in st.session_state:
-    st.download_button("📄 Download Audit", create_pdf(st.session_state.final_report), file_name="ReadyAudit_Report.pdf")
+if "report" in st.session_state:
+    st.download_button("📩 Download Report", create_pdf(st.session_state.report))
