@@ -16,20 +16,37 @@ def get_llm(is_cloud, st_secrets):
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def extract_headcount(text, llm):
-    """SIFTER: Finds the 2026 'Beast Number' (e.g. 4000 for Block)."""
-    prompt = f"Analyze March 2026 news: {text[:2500]}. Find the specific number of employees laid off or trial participants. Output ONLY the integer."
+    """Dynamic Sifter: Finds the 'Magic Number' in the news."""
+    prompt = f"Identify the specific number of people affected (layoffs/participants) in this text: {text[:2500]}. Output ONLY the digits."
     response = llm.invoke(prompt).content
     number = re.sub(r"\D", "", response)
+    # Default to 10 if nothing found, but Cap at 1M to avoid hallucinations
     return int(number) if (number and 0 < len(number) < 8) else 10
 
 def find_and_scrape_live_news(company_name):
+    """2026 Search: Sifts headlines for Synchron or Block."""
     try:
         with DDGS() as ddgs:
-            # Sifts for the actual Dorsey restructuring or Synchron COMMAND trial data
-            query = f"March 2026 {company_name} AI automation layoffs BCI enrollment news"
+            # Sifts for the actual Dorsey restructuring or Synchron clinical trials
+            query = f"March 2026 {company_name} AI automation layoffs clinical trial participants"
             results = list(ddgs.text(query, max_results=5))
             return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
-    except: return "Search failed."
+    except Exception as e:
+        return f"Search offline: {e}"
+
+def load_selected_docs(active_files, root_folder="Regulations"):
+    all_chunks = []
+    if not active_files: return None
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+    for file in active_files:
+        f_path = os.path.join(root_folder, file)
+        if os.path.exists(f_path):
+            try:
+                loader = PyPDFLoader(f_path)
+                all_chunks.extend(splitter.split_documents(loader.load()))
+            except: continue
+    if not all_chunks: return None
+    return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
 
 class EconomicImpact:
     @staticmethod
@@ -41,8 +58,8 @@ class EconomicImpact:
 def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", size=11)
-    # Cleaning for FPDF encoding
-    clean = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
-    pdf.multi_cell(0, 10, txt=clean.encode('latin-1', 'replace').decode('latin-1'))
+    pdf.set_font("helvetica", size=11)
+    # Clean text for PDF safety
+    clean = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=clean)
     return pdf.output()
