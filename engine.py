@@ -20,35 +20,33 @@ def extract_headcount(text, llm):
     prompt = f"Identify the specific number of people affected (layoffs/participants) in this text: {text[:2500]}. Output ONLY the digits."
     response = llm.invoke(prompt).content
     number = re.sub(r"\D", "", response)
-    # Default to 10 if nothing found, but Cap at 1M to avoid hallucinations
+    # Block is 4000+, Synchron is 50. This handles those specifically.
     return int(number) if (number and 0 < len(number) < 8) else 10
 
 def find_and_scrape_live_news(company_name):
-    """2026 Web Sifter: Scrapes DuckDuckGo for real-time liability triggers."""
+    """Sifts 2026 headlines for liability triggers."""
     try:
+        # DDGS 3.2.0+ requires context manager for search
         with DDGS() as ddgs:
-            # Sifts for specific 2026 keywords for Block (layoffs) or Synchron (trials)
             query = f"March 2026 {company_name} AI automation layoffs clinical trial participants"
             results = list(ddgs.text(query, max_results=5))
             return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
     except Exception as e:
-        return f"Search sifter offline: {e}"
+        return f"Search offline: {e}"
 
 class EconomicImpact:
     @staticmethod
     def calculate_liability(headcount=0):
-        # 2026 Statutory Rate: $20,000 per violation (CO SB 24-205)
+        # Colorado SB 24-205 standard: $20,000 per violation
         statutory = headcount * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
 def create_pdf(text):
-    """Generates a bytes-compatible PDF for Streamlit download."""
+    """Generates PDF as bytes to prevent 'unsupported_error' in Streamlit."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", size=11)
-    # Sanitize text for latin-1 encoding
-    clean_text = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
-    pdf.multi_cell(0, 10, txt=clean_text.encode('latin-1', 'replace').decode('latin-1'))
-    
-    # CRITICAL 2026 FIX: Must return as raw bytes to prevent 'Unsupported Error'
+    clean = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=clean)
+    # CRITICAL 2026 FIX: Streamlit requires raw bytes
     return bytes(pdf.output())
