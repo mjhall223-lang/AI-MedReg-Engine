@@ -14,37 +14,27 @@ def get_llm(is_cloud, st_secrets):
     from langchain_community.chat_models import ChatOllama
     return ChatOllama(model="gemma2:2b", temperature=0)
 
-def load_multi_knowledge_base(root_folder="Regulations"):
-    """Deep-crawls every folder. Optimized to prevent sidebar crashes."""
+def load_selected_docs(active_files, root_folder="Regulations"):
+    """Loads only the files you have toggled 'ON' in the sidebar."""
     all_chunks = []
-    indexed_files = []
-    
-    if not os.path.exists(root_folder):
-        return None, []
+    if not active_files:
+        return None
         
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
     
     for root, dirs, files in os.walk(root_folder):
         for file in files:
-            if file.endswith(".pdf"):
+            if file in active_files:
                 try:
-                    full_path = os.path.join(root, file)
-                    loader = PyPDFLoader(full_path)
+                    loader = PyPDFLoader(os.path.join(root, file))
                     docs = loader.load()
-                    for d in docs: 
-                        d.metadata["source_file"] = file
+                    for d in docs: d.metadata["source_file"] = file
                     all_chunks.extend(splitter.split_documents(docs))
-                    indexed_files.append(file)
                 except:
                     continue
                         
-    if not all_chunks: 
-        return None, []
-    
-    # Cache the embeddings to speed up re-runs
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    db = FAISS.from_documents(all_chunks, embeddings)
-    return db, indexed_files
+    if not all_chunks: return None
+    return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
 
 class EconomicImpact:
     @staticmethod
