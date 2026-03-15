@@ -27,6 +27,7 @@ def find_and_scrape_live_news(company_name):
     """2026 Web Sifter: Scrapes for specific March 2026 triggers."""
     try:
         with DDGS() as ddgs:
+            # 2026 DDGS Syntax requires context manager
             query = f"March 2026 {company_name} AI automation layoffs clinical trial participants"
             results = list(ddgs.text(query, max_results=5))
             return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
@@ -45,6 +46,8 @@ def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", size=11)
+    # Sanitize for latin-1
     clean_text = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'")
     pdf.multi_cell(0, 10, txt=clean_text.encode('latin-1', 'replace').decode('latin-1'))
+    # Return output as bytes
     return bytes(pdf.output())
