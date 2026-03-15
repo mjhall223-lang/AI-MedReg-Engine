@@ -14,32 +14,45 @@ def get_llm(is_cloud, st_secrets):
     from langchain_community.chat_models import ChatOllama
     return ChatOllama(model="gemma2:2b", temperature=0)
 
-def load_multi_knowledge_base(selected_frameworks, root_folder="Regulations"):
+def load_multi_knowledge_base(root_folder="Regulations"):
+    """Fixed: Now crawls ALL PDFs in Regulations without requiring specific subfolder names."""
     all_chunks = []
-    if not os.path.exists(root_folder): return None
+    indexed_files = []
+    
+    if not os.path.exists(root_folder):
+        os.makedirs(root_folder) # Create it if it doesn't exist
+        return None, []
+        
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+    
     for root, dirs, files in os.walk(root_folder):
         for file in files:
             if file.endswith(".pdf"):
-                path_lower = root.lower()
-                if any(f.split()[0].lower() in path_lower for f in selected_frameworks):
-                    try:
-                        loader = PyPDFLoader(os.path.join(root, file))
-                        docs = loader.load()
-                        for d in docs: d.metadata["source_file"] = file
-                        all_chunks.extend(splitter.split_documents(docs))
-                    except: continue
-    if not all_chunks: return None
-    return FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
+                try:
+                    full_path = os.path.join(root, file)
+                    loader = PyPDFLoader(full_path)
+                    docs = loader.load()
+                    for d in docs: 
+                        d.metadata["source_file"] = file
+                    all_chunks.extend(splitter.split_documents(docs))
+                    indexed_files.append(file)
+                except Exception as e:
+                    continue
+                        
+    if not all_chunks: 
+        return None, []
+        
+    db = FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
+    return db, indexed_files
 
 class EconomicImpact:
     @staticmethod
     def calculate_liability(token_usage=0, replaced_staff=0):
         token_tax = (token_usage / 1000) * 0.0005
         payroll_tax = (replaced_staff * 60000) * 0.15
-        return {"token_tax": round(token_tax, 2), "payroll_tax": round(payroll_tax, 2), "total": round(token_tax + payroll_tax, 2)}
+        return {"total": round(token_tax + payroll_tax, 2)}
 
-def create_pdf(text, title="READY-AUDIT: CERTIFIED REGULATORY REPORT"):
+def create_pdf(text, title="CERTIFIED AUDIT REPORT"):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
@@ -47,8 +60,4 @@ def create_pdf(text, title="READY-AUDIT: CERTIFIED REGULATORY REPORT"):
     pdf.set_font("Arial", size=11)
     clean_text = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'")
     pdf.multi_cell(0, 10, txt=clean_text.encode('latin-1', 'replace').decode('latin-1'))
-    if "CERTIFIED" in title:
-        pdf.ln(20); pdf.set_font("Arial", 'B', 11); pdf.cell(0, 10, "OFFICIAL CERTIFICATION:", ln=True)
-        pdf.set_font("Arial", size=10); pdf.cell(0, 10, f"Date: {datetime.date.today()}", ln=True)
-        pdf.cell(0, 10, "Lead Specialist: Myia Hall", ln=True)
     return bytes(pdf.output())
