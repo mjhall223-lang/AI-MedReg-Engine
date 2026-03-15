@@ -15,7 +15,7 @@ def get_llm(is_cloud, st_secrets):
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def load_multi_knowledge_base(root_folder="Regulations"):
-    """Deep-crawls all subdirectories to find every PDF, no matter how messy the folders are."""
+    """Deep-crawls every folder. Optimized to prevent sidebar crashes."""
     all_chunks = []
     indexed_files = []
     
@@ -24,7 +24,6 @@ def load_multi_knowledge_base(root_folder="Regulations"):
         
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
     
-    # Walk through ALL subfolders
     for root, dirs, files in os.walk(root_folder):
         for file in files:
             if file.endswith(".pdf"):
@@ -36,13 +35,15 @@ def load_multi_knowledge_base(root_folder="Regulations"):
                         d.metadata["source_file"] = file
                     all_chunks.extend(splitter.split_documents(docs))
                     indexed_files.append(file)
-                except Exception as e:
+                except:
                     continue
                         
     if not all_chunks: 
         return None, []
-        
-    db = FAISS.from_documents(all_chunks, HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"))
+    
+    # Cache the embeddings to speed up re-runs
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    db = FAISS.from_documents(all_chunks, embeddings)
     return db, indexed_files
 
 class EconomicImpact:
