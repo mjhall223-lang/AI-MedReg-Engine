@@ -2,38 +2,38 @@ import streamlit as st
 import os
 import sys
 import tempfile
-
-# Force Python to find local engine.py
 sys.path.append(os.path.dirname(__file__))
 
-try:
-    from engine import (
-        get_llm, find_and_scrape_live_news, EconomicImpact, 
-        create_pdf, load_selected_docs
-    )
-except ImportError as e:
-    st.error(f"❌ Engine Load Error: {e}")
-    st.stop()
+from engine import (
+    get_llm, find_and_scrape_live_news, EconomicImpact, 
+    create_pdf, load_selected_docs, extract_headcount
+)
 
-st.set_page_config(page_title="ReadyAudit: Specialist Hub", layout="wide")
-st.title("⚖️ ReadyAudit: Specialist Liability Engine")
-
+st.set_page_config(page_title="ReadyAudit: Lead Hunter", layout="wide")
 is_cloud = st.secrets.get("GROQ_API_KEY") is not None
+llm = get_llm(is_cloud, st.secrets)
+
+# --- STATE MANAGEMENT ---
+if "suggested_headcount" not in st.session_state:
+    st.session_state.suggested_headcount = 10
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info("Today: March 15, 2026")
     
     st.markdown("### 📈 LIABILITY CALCULATOR")
-    replaced = st.number_input("Affected Personnel/Users:", value=10, step=1)
+    # This input now listens to the session state
+    replaced = st.number_input("Affected Personnel:", 
+                               value=st.session_state.suggested_headcount, 
+                               step=1, key="headcount_input")
     
     impact = EconomicImpact.calculate_liability(replaced_staff=replaced)
-    st.metric("Statutory Exposure", f"${impact['statutory']:,}", delta="Per CO SB 24-205")
+    st.metric("Statutory Risk", f"${impact['statutory']:,}", delta="Per CO SB 24-205")
     st.metric("Total Governance Debt", f"${impact['total']:,}")
     st.session_state.impact_total = impact['total']
 
     st.markdown("---")
-    st.markdown("### 📜 ACTIVE FRAMEWORKS")
+    st.markdown("### 📜 FRAMEWORKS")
     if not os.path.exists("Regulations"): os.makedirs("Regulations")
     all_pdfs = [f for f in os.listdir("Regulations") if f.endswith(".pdf")]
     selected_files = [f for f in all_pdfs if st.checkbox(f"📄 {f}", value=True)]
@@ -41,38 +41,46 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["📁 Deep Audit", "🤖 Autonomous Hunter"])
 
 with tab1:
-    uploaded = st.file_uploader("Upload Evidence Policy", type="pdf")
+    uploaded = st.file_uploader("Upload Policy", type="pdf")
     if st.button("🚀 Run Audit"):
         if not uploaded: st.error("Upload a file.")
         else:
-            with st.status("Analyzing...") as s:
+            with st.status("Analyzing..."):
                 db = load_selected_docs(selected_files)
+                from langchain_community.document_loaders import PyPDFLoader
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                     tmp.write(uploaded.getvalue())
                     t_path = tmp.name
-                from langchain_community.document_loaders import PyPDFLoader
                 evidence = "\n".join([p.page_content for p in PyPDFLoader(t_path).load()[:5]])
                 regs = "\n".join([d.page_content for d in db.similarity_search(evidence, k=3)]) if db else "No regs."
-                
-                prompt = f"Gap Analysis for March 2026. Laws: {regs}. Policy: {evidence}. Identify violations of HB 24-1058 and SB 24-205."
-                report = get_llm(is_cloud, st.secrets).invoke(prompt).content
+                prompt = f"Date: March 15, 2026. Gap Analysis. Regs: {regs}. Policy: {evidence}."
+                report = llm.invoke(prompt).content
                 st.session_state.report = report
                 st.markdown(report)
                 os.remove(t_path)
 
 with tab2:
-    st.header("Lead Hunter")
-    co_name = st.text_input("Enter Company Name")
-    if st.button("🔍 Scout & Pitch"):
-        with st.status("Scouting March 2026 news...") as s:
+    st.header("Lead Hunter: Real-Time Sifting")
+    co_name = st.text_input("Enter Company (e.g., 'Block', 'Synchron')")
+    if st.button("🔍 Scout & Auto-Calculate"):
+        with st.status("Sifting news for headcounts..."):
             news = find_and_scrape_live_news(co_name, st.secrets.get("TAVILY_API_KEY"))
-            prompt = f"""You are a Regulatory Specialist (March 15, 2026). 
-            News found for {co_name}: {news}.
-            Draft a pitch using the ${st.session_state.impact_total:,.2f} liability figure. 
-            Cite the June 30, 2026 Colorado AI Act deadline."""
-            report = get_llm(is_cloud, st.secrets).invoke(prompt).content
+            
+            # THE MAGIC: Extract the number and update the sidebar
+            new_count = extract_headcount(news, llm)
+            st.session_state.suggested_headcount = new_count
+            
+            prompt = f"""
+            Regulatory Specialist (March 15, 2026). News: {news}. 
+            Pitch: Mention {new_count} affected people found in the news. 
+            Cite the ${EconomicImpact.calculate_liability(new_count)['total']:,} total debt.
+            """
+            report = llm.invoke(prompt).content
             st.session_state.report = report
+            st.markdown(f"**Sifted Result:** AI identified **{new_count}** affected individuals in the news.")
+            st.markdown("---")
             st.markdown(report)
+            st.rerun() # Refresh to show new sidebar math
 
 if "report" in st.session_state:
-    st.download_button("📩 Download PDF", create_pdf(st.session_state.report), file_name="Audit_Report.pdf")
+    st.download_button("📩 Download PDF", create_pdf(st.session_state.report), file_name="Audit.pdf")
