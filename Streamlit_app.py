@@ -1,10 +1,10 @@
 import streamlit as st
 import os
 import tempfile
-# Ensure this line is EXACTLY like this:
+# Ensure engine.py is in the same folder!
 from engine import get_llm, find_and_scrape_live_news, EconomicImpact, create_pdf, load_selected_docs
 
-st.set_page_config(page_title="ReadyAudit Engine", layout="wide")
+st.set_page_config(page_title="ReadyAudit Engine", layout="wide", page_icon="⚖️")
 st.title("⚖️ ReadyAudit: Live-News Liability Engine")
 
 is_cloud = st.secrets.get("GROQ_API_KEY") is not None
@@ -36,13 +36,19 @@ with tab1:
             st.error("Select regulations and upload evidence.")
         else:
             with st.status("🔍 Analyzing Gaps...") as s:
+                # IMPORTANT: We import this here to prevent the NameError at line 43
+                from langchain_community.document_loaders import PyPDFLoader
+                
                 db = load_selected_docs(selected_files)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                     tmp.write(uploaded.getvalue())
                     t_path = tmp.name
+                
+                # This is the line that was crashing:
                 evidence = "\n".join([p.page_content for p in PyPDFLoader(t_path).load()[:5]])
                 regs = "\n".join([d.page_content for d in db.similarity_search(evidence, k=3)])
-                prompt = f"Conduct a gap analysis. Laws: {regs}. Evidence: {evidence}. Remediation steps?"
+                
+                prompt = f"Conduct a gap analysis. Laws: {regs}. Evidence: {evidence}. Provide 3 specific remediation steps."
                 report = get_llm(is_cloud, st.secrets).invoke(prompt).content
                 st.session_state.report = report
                 st.markdown(report)
@@ -63,7 +69,7 @@ with tab2:
                 prompt = f"""You are a Regulatory Specialist. Date: March 15, 2026.
                 LIVE NEWS for {co_name}: {news_data}
                 LAWS: {regs}
-                DRAFT PITCH: Mention a specific 2026 news event found. Use the ${st.session_state.impact_total:,.2f} liability as the hook. Focus on the June 30th Colorado deadline."""
+                DRAFT PITCH: Mention a specific 2026 news event. Use the ${st.session_state.impact_total:,.2f} liability as the hook. Mention the June 30th Colorado deadline."""
                 
                 report = get_llm(is_cloud, st.secrets).invoke(prompt).content
                 st.session_state.report = report
@@ -71,4 +77,3 @@ with tab2:
 
 if "report" in st.session_state:
     st.download_button("📩 Download Professional Report", create_pdf(st.session_state.report), file_name="ReadyAudit_Report.pdf")
-    
