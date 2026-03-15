@@ -9,9 +9,9 @@ from engine import (
     create_pdf, load_selected_docs, extract_headcount
 )
 
-st.set_page_config(page_title="ReadyAudit Zero-Key Hub", layout="wide")
+st.set_page_config(page_title="ReadyAudit: Specialist Hub", layout="wide")
 
-# Persistent Memory
+# Session State Pantry
 if "audit_report" not in st.session_state: st.session_state.audit_report = ""
 if "scout_report" not in st.session_state: st.session_state.scout_report = ""
 if "scout_news" not in st.session_state: st.session_state.scout_news = ""
@@ -24,6 +24,12 @@ with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info("Today: March 15, 2026")
     
+    if st.button("♻️ Reset App State"):
+        st.session_state.audit_report = ""
+        st.session_state.scout_report = ""
+        st.session_state.headcount = 10
+        st.rerun()
+
     val = st.number_input("Affected Personnel:", value=st.session_state.headcount, step=1)
     st.session_state.headcount = val 
     
@@ -39,7 +45,7 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["📁 Deep Audit", "🤖 Autonomous Hunter"])
 
 with tab1:
-    uploaded = st.file_uploader("Upload Evidence", type="pdf")
+    uploaded = st.file_uploader("Upload Policy", type="pdf")
     if st.button("🚀 Run Analysis"):
         with st.status("Analyzing..."):
             db = load_selected_docs(selected_files)
@@ -59,16 +65,16 @@ with tab1:
 with tab2:
     co_name = st.text_input("Enter Company Name")
     if st.button("🔍 Scout & Auto-Calculate"):
-        with st.status("Sifting DuckDuckGo for 2026 news..."):
+        with st.status("Sifting 2026 news..."):
             news = find_and_scrape_live_news(co_name)
             st.session_state.scout_news = news
-            # AI extracts the headcount from DDG results
             st.session_state.headcount = extract_headcount(news, llm)
             
             prompt = f"""
             Regulatory Specialist (March 15, 2026). News: {news}. 
-            Draft a pitch for {co_name} using the {st.session_state.headcount} people affected.
-            Cite the ${EconomicImpact.calculate_liability(st.session_state.headcount)['total']:,} debt.
+            Draft a pitch for {co_name} based on {st.session_state.headcount} affected people. 
+            Cite the ${EconomicImpact.calculate_liability(st.session_state.headcount)['total']:,} total debt.
+            Mention the June 30, 2026 Colorado AI Act deadline.
             """
             st.session_state.scout_report = llm.invoke(prompt).content
             st.rerun()
