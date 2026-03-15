@@ -9,10 +9,9 @@ from engine import (
     create_pdf, load_selected_docs, extract_headcount
 )
 
-st.set_page_config(page_title="ReadyAudit: Specialist Hub", layout="wide")
+st.set_page_config(page_title="ReadyAudit: Lead Hunter", layout="wide")
 
-# Session State Pantry
-if "audit_report" not in st.session_state: st.session_state.audit_report = ""
+# Persistent State Management
 if "scout_report" not in st.session_state: st.session_state.scout_report = ""
 if "scout_news" not in st.session_state: st.session_state.scout_news = ""
 if "headcount" not in st.session_state: st.session_state.headcount = 10
@@ -25,7 +24,6 @@ with st.sidebar:
     st.info("Today: March 15, 2026")
     
     if st.button("♻️ Reset App State"):
-        st.session_state.audit_report = ""
         st.session_state.scout_report = ""
         st.session_state.headcount = 10
         st.rerun()
@@ -45,25 +43,22 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["📁 Deep Audit", "🤖 Autonomous Hunter"])
 
 with tab1:
-    uploaded = st.file_uploader("Upload Policy", type="pdf")
+    uploaded = st.file_uploader("Upload Evidence", type="pdf")
     if st.button("🚀 Run Analysis"):
         with st.status("Analyzing..."):
             db = load_selected_docs(selected_files)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(uploaded.getvalue())
                 t_path = tmp.name
-            from langchain_community.document_loaders import PyPDFLoader
             evidence = "\n".join([p.page_content for p in PyPDFLoader(t_path).load()[:5]])
             regs = "\n".join([d.page_content for d in db.similarity_search(evidence, k=3)]) if db else ""
-            st.session_state.audit_report = llm.invoke(f"Audit Policy: {evidence} against Laws: {regs}").content
+            st.session_state.report = llm.invoke(f"Audit Policy: {evidence} against Laws: {regs}").content
             os.remove(t_path)
-    
-    if st.session_state.audit_report:
-        st.markdown(st.session_state.audit_report)
-        st.download_button("📩 Download Audit", create_pdf(st.session_state.audit_report), "Audit.pdf")
+    if "report" in st.session_state:
+        st.markdown(st.session_state.report)
 
 with tab2:
-    co_name = st.text_input("Enter Company Name")
+    co_name = st.text_input("Enter Company (e.g., 'Block', 'Synchron')")
     if st.button("🔍 Scout & Auto-Calculate"):
         with st.status("Sifting 2026 news..."):
             news = find_and_scrape_live_news(co_name)
@@ -72,9 +67,8 @@ with tab2:
             
             prompt = f"""
             Regulatory Specialist (March 15, 2026). News: {news}. 
-            Draft a pitch for {co_name} based on {st.session_state.headcount} affected people. 
-            Cite the ${EconomicImpact.calculate_liability(st.session_state.headcount)['total']:,} total debt.
-            Mention the June 30, 2026 Colorado AI Act deadline.
+            Pitch for {co_name} based on {st.session_state.headcount} people affected. 
+            Deadline: June 30, 2026 (Colorado AI Act).
             """
             st.session_state.scout_report = llm.invoke(prompt).content
             st.rerun()
