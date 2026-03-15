@@ -22,7 +22,6 @@ def load_multi_knowledge_base(selected_frameworks, root_folder="Regulations"):
         for file in files:
             if file.endswith(".pdf"):
                 path_lower = root.lower()
-                # Match folder name to selected frameworks
                 if any(f.split()[0].lower() in path_lower for f in selected_frameworks):
                     try:
                         loader = PyPDFLoader(os.path.join(root, file))
@@ -36,21 +35,20 @@ def load_multi_knowledge_base(selected_frameworks, root_folder="Regulations"):
 class EconomicImpact:
     @staticmethod
     def calculate_liability(token_usage=0, replaced_staff=0):
-        # Robot Tax Calculation Logic
         token_tax = (token_usage / 1000) * 0.0005
         payroll_tax = (replaced_staff * 60000) * 0.15
         return {"token_tax": round(token_tax, 2), "payroll_tax": round(payroll_tax, 2), "total": round(token_tax + payroll_tax, 2)}
 
-def create_pdf(text):
+def create_pdf(text, title="READY-AUDIT: CERTIFIED REGULATORY REPORT"):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "READY-AUDIT: CERTIFIED REGULATORY REPORT", ln=True, align='C')
+    pdf.cell(0, 10, title, ln=True, align='C')
     pdf.set_font("Arial", size=11)
-    # Clean text for PDF compatibility
     clean_text = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'")
     pdf.multi_cell(0, 10, txt=clean_text.encode('latin-1', 'replace').decode('latin-1'))
-    pdf.ln(20); pdf.set_font("Arial", 'B', 11); pdf.cell(0, 10, "OFFICIAL CERTIFICATION:", ln=True)
-    pdf.set_font("Arial", size=10); pdf.cell(0, 10, f"Date: {datetime.date.today()}", ln=True)
-    pdf.cell(0, 10, "Lead Specialist: Myia Hall", ln=True)
+    if "CERTIFIED" in title:
+        pdf.ln(20); pdf.set_font("Arial", 'B', 11); pdf.cell(0, 10, "OFFICIAL CERTIFICATION:", ln=True)
+        pdf.set_font("Arial", size=10); pdf.cell(0, 10, f"Date: {datetime.date.today()}", ln=True)
+        pdf.cell(0, 10, "Lead Specialist: Myia Hall", ln=True)
     return bytes(pdf.output())
