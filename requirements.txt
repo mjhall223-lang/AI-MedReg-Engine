@@ -3,8 +3,8 @@ langchain
 langchain-groq
 langchain-huggingface
 langchain-community
-ddgs>=9.11.3
+ddgs>=8.1.1
 pypdf
-fpdf2
+fpdf
 faiss-cpu
 sentence-transformers
