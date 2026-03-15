@@ -51,9 +51,9 @@ with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info("Today: March 15, 2026")
     
-    # Use 'value' instead of 'key' to avoid locking the session_state
-    new_val = st.number_input("Affected Personnel:", value=st.session_state.headcount, step=1)
-    st.session_state.headcount = new_val 
+    # We use st.session_state.headcount as the value to allow the Scout to update it
+    manual_count = st.number_input("Affected Personnel:", value=st.session_state.headcount, step=1)
+    st.session_state.headcount = manual_count 
     
     impact = EconomicImpact.calculate_liability(st.session_state.headcount)
     st.metric("Statutory Risk", f"${impact['statutory']:,}")
