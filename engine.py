@@ -1,12 +1,11 @@
 import os
 import re
-import streamlit as st
 from fpdf import FPDF
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-# 2026 Update: duckduckgo-search is now officially ddgs
+# 2026 Update: Importing from the refactored ddgs library
 from ddgs import DDGS 
 
 def get_llm(is_cloud, st_secrets):
@@ -17,17 +16,17 @@ def get_llm(is_cloud, st_secrets):
     return ChatOllama(model="gemma2:2b", temperature=0)
 
 def extract_headcount(text, llm):
-    """Dynamic Sifter: Finds the 'Beast Number' (headcount) in raw news text."""
+    """Dynamic Sifter: Finds the 'Beast Number' in raw news text."""
     prompt = f"Identify the specific number of people affected (layoffs/participants) in this text: {text[:2500]}. Output ONLY the digits."
     response = llm.invoke(prompt).content
     number = re.sub(r"\D", "", response)
     return int(number) if (number and 0 < len(number) < 8) else 10
 
 def find_and_scrape_live_news(company_name):
-    """Sifts 2026 headlines for liability triggers."""
+    """Sifts 2026 headlines for March 15 triggers."""
     try:
         # DDGS 9.11.3+ uses the .text() generator
-        results = DDGS().text(f"March 2026 {company_name} AI layoffs headcount clinical trial", max_results=5)
+        results = DDGS().text(f"March 2026 {company_name} AI automation layoffs headcount", max_results=5)
         return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
     except Exception as e:
         return f"Search sifter offline: {e}"
@@ -40,13 +39,12 @@ class EconomicImpact:
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
 def create_pdf(text):
-    """Generates PDF as raw bytes to prevent Streamlit Download Errors."""
+    """Generates PDF as bytes to prevent 'unsupported_error' in Streamlit."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", size=11)
-    # Clean text for PDF compatibility
     clean = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, txt=clean)
-    
-    # CRITICAL: Streamlit 2026 requires output to be explicitly converted to bytes
+    # CRITICAL 2026 FIX: Must return as raw bytes
     return bytes(pdf.output())
+    
