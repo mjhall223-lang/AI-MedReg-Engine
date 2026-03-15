@@ -60,4 +60,3 @@ with tab2:
         # BYTES FIX applied here
         pdf_data = create_pdf(st.session_state.scout_report)
         st.download_button("📩 Download Pitch PDF", pdf_data, f"{co_name}_Pitch.pdf", mime="application/pdf")
-        
