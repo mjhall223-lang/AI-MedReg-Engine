@@ -1,40 +1,57 @@
-import streamlit as st
-import re
-from engine import get_llm, scout_organization
+import sys, os, re, streamlit as st
+from engine import get_llm, scout_organization, SpecialistMath
 
-st.set_page_config(page_title="ReadyAudit", layout="wide")
+# Force path for Streamlit Cloud deployment
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+st.set_page_config(page_title="ReadyAudit: Specialist Hub", layout="wide")
 
-# Persistent State
+# Persistent State Management
 if "count" not in st.session_state: st.session_state.count = 1
 if "report" not in st.session_state: st.session_state.report = ""
 if "hole" not in st.session_state: st.session_state.hole = "Governance Gap"
 
 llm = get_llm(st.secrets)
+tab1, tab2 = st.tabs(["📁 Deep Audit", "🤖 Autonomous Hunter"])
 
-org_name = st.text_input("Enter Lead", value="Block")
-if st.button("🔍 Scout & Sift"):
-    with st.status(f"Hunting {org_name} triggers..."):
-        news, analysis = scout_organization(org_name, llm)
-        parts = [p.strip() for p in analysis.split("|")]
-        if len(parts) >= 3:
-            # SAFETY NET: Rips digits, but defaults to 1 instead of 0
-            digits = re.sub(r"\D", "", parts[1])
-            st.session_state.count = int(digits) if (digits and int(digits) > 0) else 1
-            st.session_state.hole = parts[2]
-            
-            # Cites the June 30, 2026 Enforcement Cliff (SB 25B-004)
-            st.session_state.report = llm.invoke(f"Pitch for {org_name}. Count: {st.session_state.count}. Hole: {parts[2]}. Deadline: June 30, 2026.").content
-            st.rerun()
+with tab2:
+    org_name = st.text_input("Enter Lead (e.g., 'Block', 'Neuralink')")
+    if st.button("🔍 Scout & Sift"):
+        st.session_state.report = "" 
+        with st.status(f"Hunting {org_name} 2026 triggers..."):
+            news, analysis = scout_organization(org_name, llm)
+            try:
+                # 1. PARSE: Handles "Industry | Number | Hole"
+                parts = [p.strip() for p in analysis.split("|")]
+                if len(parts) >= 3:
+                    # REGEX FIX: Rips digits out even if LLM adds text or commas
+                    count_match = re.search(r'\d{1,3}(?:,\d{3})*', parts[1])
+                    count = int(count_match.group().replace(',', '')) if count_match else 1
+                    
+                    # 2. STATE SYNC: Locks the Sidebar immediately
+                    st.session_state.count = count
+                    st.session_state.hole = parts[2]
+                    
+                    # 3. PITCH: Cites June 30, 2026 Enforcement Cliff (SB 25B-004)
+                    pitch_prompt = f"Draft a Specialist Pitch for {org_name}. Count: {count}. Hole: {st.session_state.hole}. Target $20k violation risk under SB 25B-004. Deadline: June 30, 2026."
+                    st.session_state.report = llm.invoke(pitch_prompt).content
+                    
+                    # 4. THE SYNC FIX: Forces UI refresh to update Sidebar math
+                    st.rerun() 
+            except Exception as e:
+                st.error(f"Sift failed. Error: {e}")
 
-st.markdown(st.session_state.report)
+if st.session_state.report:
+    st.markdown(f"### 🛡️ Specialized Pitch for {org_name}")
+    st.markdown(st.session_state.report)
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info(f"Target Hole: {st.session_state.hole}")
-    st.session_state.count = st.number_input("Count:", value=st.session_state.count)
     
-    # Statutory Calculation: $20,000 per violation
-    statutory = st.session_state.count * 20000
-    st.metric("Statutory Risk", f"${statutory:,}")
-    st.metric("Governance Debt", f"${round(statutory * 1.25, 2):,}")
+    # Value is now SLAVED to the scout results (21 or 4000)
+    st.session_state.count = st.number_input("Affected Personnel/Subjects:", value=st.session_state.count)
+    
+    impact = SpecialistMath.calculate(st.session_state.count)
+    st.metric("Statutory Risk (SB 24-205)", f"${impact['statutory']:,}")
+    st.metric("Total Governance Debt", f"${impact['total']:,}")
     st.caption("Enforcement Cliff: June 30, 2026")
