@@ -21,11 +21,11 @@ with tab2:
             analysis = scout_organization(org_name, llm)
             parts = [p.strip() for p in analysis.split("|")]
             if len(parts) >= 3:
-                # FIX: Extract digits safely to prevent red screen error
+                # Capture digits safely
                 digits = re.sub(r"\D", "", parts[1])
                 st.session_state.count = int(digits) if digits else 4000
                 st.session_state.hole = parts[2]
-                st.session_state.pitch = llm.invoke(f"Draft a board-level proposal for {org_name} regarding the {parts[2]} hole.").content
+                st.session_state.pitch = llm.invoke(f"Draft a board-level proposal for {org_name} to fill the ${st.session_state.count*20000:,} hole via a {parts[2]}.").content
                 st.rerun()
     st.markdown(st.session_state.pitch)
 
