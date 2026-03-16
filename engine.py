@@ -7,10 +7,10 @@ def get_llm(st_secrets):
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
 def scout_organization(org_name, llm):
-    """Sifts live March 2026 data for 'Beast' triggers (trials/layoffs)."""
+    """SIFTER: Only pulls 2026 data for the SPECIFIC organization typed."""
     try:
         with DDGS() as ddgs:
-            # Query hunts for the actual 2026 triggers
+            # Query isolates the lead and forces 2026 context
             query = f"March 2026 {org_name} AI clinical trial participants layoffs"
             results = list(ddgs.text(query, max_results=5))
             news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
@@ -20,7 +20,7 @@ def scout_organization(org_name, llm):
     Analyze {org_name} ONLY. 
     Context: {news_text[:1200]}
     1. Industry: (Fintech, MedTech, or Enterprise)
-    2. Beast Number: (Extract ONLY raw digits for trial participants OR affected staff)
+    2. Beast Number: (Extract only the raw number for THIS company's subjects/staff)
     3. The Hole: (Identify the specific SB 24-205 requirement missing)
     Return format: Industry | Number | Hole
     """
@@ -31,5 +31,14 @@ class SpecialistMath:
     @staticmethod
     def calculate(count):
         # Colorado SB 24-205: $20,000 per violation
+        # Each 'Beast' subject is a violation count.
         statutory = (count if count > 0 else 10) * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
+
+def create_pdf(text):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("helvetica", size=11)
+    clean = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=clean)
+    return bytes(pdf.output())
