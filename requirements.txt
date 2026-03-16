@@ -1,10 +1,5 @@
-streamlit
-langchain
-langchain-groq
-langchain-huggingface
-langchain-community
+streamlit>=1.42.0
+langchain>=0.3.15
+langchain-groq==1.1.2
 duckduckgo-search>=6.3.0
-pypdf
-fpdf2
-faiss-cpu
-sentence-transformers
+fpdf2>=2.8.7
