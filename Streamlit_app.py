@@ -23,15 +23,15 @@ with tab2:
                 # 1. PARSE: Handles "Industry | Number | Hole"
                 parts = [p.strip() for p in analysis.split("|")]
                 if len(parts) >= 3:
-                    # REGEX FIX: Pulls the digits even if LLM adds text
+                    # REGEX FIX: Rips digits out even if LLM adds text
                     count_match = re.search(r'\d+', parts[1].replace(',', ''))
                     count = int(count_match.group()) if count_match else 1
                     
-                    # 2. STATE SYNC: This locks the sidebar metrics immediately
+                    # 2. STATE SYNC: Locks the Sidebar immediately
                     st.session_state.count = count
                     st.session_state.hole = parts[2]
                     
-                    # 3. PITCH: Explicitly targets June 30, 2026
+                    # 3. PITCH: Cites June 30, 2026 Enforcement Cliff
                     pitch_prompt = f"Draft a Specialist Pitch for {org_name}. Count: {count}. Hole: {st.session_state.hole}. Target $20k violation risk under SB 25B-004. Deadline: June 30, 2026."
                     st.session_state.report = llm.invoke(pitch_prompt).content
                     st.rerun() 
@@ -46,7 +46,7 @@ with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info(f"Target Hole: {st.session_state.hole}")
     
-    # This input is now SLAVED to the Scout results (4,000 or 21)
+    # Input is now SLAVED to the Scout results (4,000 or 21)
     st.session_state.count = st.number_input("Affected Subjects/Staff:", value=st.session_state.count)
     
     impact = SpecialistMath.calculate(st.session_state.count)
