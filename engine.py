@@ -6,23 +6,21 @@ def get_llm(st_secrets):
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
 def scout_organization(org_name, llm):
-    """SIFTER: Only pulls March 2026 data for the SPECIFIC company."""
     try:
         with DDGS() as ddgs:
-            # Query targets the actual 2026 'Beast' triggers
-            query = f"March 2026 {org_name} AI clinical trial participants layoffs news"
+            # Targets the actual 4,000 layoffs confirmed Feb 2026
+            query = f"March 2026 {org_name} AI layoffs headcount risk"
             results = list(ddgs.text(query, max_results=5))
             news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
     except: news_text = "Search offline."
 
-    # PROMPT FIX: Forces LLM to return a clean string for the Sidebar
+    # FORMAT ENFORCER: Rips the 'Beast' count out for the sidebar
     analysis_prompt = f"""
-    Analyze the BUSINESS ENTITY '{org_name}' for 2026 compliance.
-    Context: {news_text[:1200]}
+    Analyze '{org_name}' for 2026 Statutory Debt. Context: {news_text[:1200]}
     
     REQUIRED OUTPUT: Industry | Number | Hole
-    - Number: Extract raw digits for staff/subjects. 
-    - Hole: Identify the SB 24-205 requirement missing (e.g., 'Human Appeal Path').
+    - Number: Use the raw digit for layoffs (e.g., 4000). 
+    - Hole: Identify the SB 24-205 requirement (e.g., 'Human Appeal Path').
     """
     analysis = llm.invoke(analysis_prompt).content
     return news_text, analysis
@@ -30,6 +28,6 @@ def scout_organization(org_name, llm):
 class SpecialistMath:
     @staticmethod
     def calculate(count):
-        # Colorado SB 24-205: $20,000 per violation
-        statutory = (count if count > 0 else 1) * 20000 
+        # Penalty: $20,000 per violation (per person)
+        statutory = count * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
