@@ -1,5 +1,8 @@
-streamlit
-langchain-groq
-duckduckgo-search
-PyPDF2
+streamlit>=1.42.0
+langchain-groq>=1.1.2
+duckduckgo-search>=7.0.0
+pypdf>=5.1.0
 pathlib
+beautifulsoup4>=4.13.0
+requests>=2.32.0
+reportlab>=4.4.10
