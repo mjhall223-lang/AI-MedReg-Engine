@@ -1,53 +1,42 @@
-import os
 import re
-import streamlit as st
 from fpdf import FPDF
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
 from duckduckgo_search import DDGS 
 
-def get_llm(is_cloud, st_secrets):
-    if is_cloud and st_secrets.get("GROQ_API_KEY"):
-        from langchain_groq import ChatGroq
-        return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
-    from langchain_community.chat_models import ChatOllama
-    return ChatOllama(model="gemma2:2b", temperature=0)
+def get_llm(st_secrets):
+    from langchain_groq import ChatGroq
+    return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
 def extract_headcount(text, llm):
-    """SIFTER: Finds the headcount (e.g., 4000 for Block) in raw news text."""
-    prompt = f"Identify the specific number of people affected (layoffs or trial participants) in this text: {text[:2500]}. Output ONLY the digits."
+    """SIFTER: Finds the actual 'Beast' number (e.g., 4000 for Block) in raw news."""
+    prompt = f"Identify the specific number of people affected by AI automation or clinical trials in this text: {text[:2500]}. Output ONLY the digits."
     response = llm.invoke(prompt).content
     number = re.sub(r"\D", "", response)
-    # 4000 for Block, 50 for Synchron. This handles those specifically.
+    # Block 2026 is 4000+, Synchron is 50. This handles those specifically.
     return int(number) if (number and 0 < len(number) < 8) else 10
 
-def find_and_scrape_live_news(company_name):
+def find_live_news(company_name):
     """2026 Web Sifter: Scrapes for specific March 2026 triggers."""
     try:
         with DDGS() as ddgs:
-            # 2026 DDGS Syntax requires context manager
+            # Sifts for the actual 2026 "Beast" news
             query = f"March 2026 {company_name} AI automation layoffs clinical trial participants"
             results = list(ddgs.text(query, max_results=5))
             return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
-    except Exception:
-        return "Search offline."
+    except Exception: return "Search offline."
 
 class EconomicImpact:
     @staticmethod
     def calculate_liability(headcount=0):
-        # 2026 Statutory Rate: $20,000 per violation (CO SB 24-205)
+        # Colorado SB 24-205: $20,000 per violation
         statutory = headcount * 20000 
+        # Total debt including legal/audit/governance (25% overhead)
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
-def create_pdf(text):
-    """Generates a bytes-compatible PDF to fix Streamlit's 'unsupported_error'."""
+def create_pdf_bytes(text):
+    """Returns raw bytes to prevent Streamlit download crashes."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", size=11)
-    # Sanitize for latin-1
-    clean_text = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2019', "'")
-    pdf.multi_cell(0, 10, txt=clean_text.encode('latin-1', 'replace').decode('latin-1'))
-    # Return output as bytes
+    clean = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=clean)
     return bytes(pdf.output())
