@@ -6,11 +6,11 @@ def get_llm(st_secrets):
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
 def scout_organization(org_name, llm):
-    """HUNTER: Pulls March 2026 ground truth."""
+    """HUNTER: Pulls March 2026 ground truth for pitches."""
     try:
         with DDGS() as ddgs:
             # Targets 4,000 layoffs (Feb 26) or 21 clinical subjects (Jan 28)
-            query = f"March 2026 {org_name} AI headcount reduction SB 24-205"
+            query = f"March 2026 {org_name} AI layoffs headcount reduction SB 24-205"
             results = list(ddgs.text(query, max_results=5))
             news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
     except: news_text = "Search offline."
@@ -25,15 +25,16 @@ def scout_organization(org_name, llm):
     """
     return llm.invoke(analysis_prompt).content
 
-def perform_remediation(org_name, hole, count, llm):
-    """MECHANIC: Builds the actual legal artifacts from your database."""
-    remediation_prompt = f"""
-    Draft a REMEDIATION AUDIT for {org_name}.
-    Target: {count} AI-driven decisions (Statutory Risk: ${count * 20000:,}).
-    Hole: {hole}.
-    Artifacts to Draft: 
+def perform_gap_analysis(technical_file_content, llm):
+    """MECHANIC: Compares technical files against the law database."""
+    gap_prompt = f"""
+    Perform a DEEP GAP ANALYSIS. 
+    Compare the following TECHNICAL FILE CONTENT against our Law Database (SB 24-205, NIST AI RMF, SB 25B-004).
+    Content: {technical_file_content[:3000]}
+    
+    REQUIRED: Identify missing 'Affirmative Defense' artifacts, specifically:
     1. Adverse Decision Notice (Principal Reasons Disclosure)
     2. Human-in-the-Loop Appeal Protocol
-    Deadline: June 30, 2026 (SB 25B-004).
+    3. Annual Impact Assessment (Mandatory by June 30, 2026)
     """
-    return llm.invoke(remediation_prompt).content
+    return llm.invoke(gap_prompt).content
