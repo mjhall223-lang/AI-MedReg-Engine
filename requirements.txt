@@ -1,4 +1,4 @@
-streamlit>=1.42.0
+streamlit>=1.55.0
 langchain>=0.3.15
 langchain-groq==1.1.2
 duckduckgo-search>=6.3.0
