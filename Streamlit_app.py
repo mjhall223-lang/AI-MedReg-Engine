@@ -1,6 +1,6 @@
 import streamlit as st
 import re
-from engine import get_llm, scout_organization, perform_remediation
+from engine import get_llm, scout_organization, perform_gap_analysis
 
 st.set_page_config(page_title="ReadyAudit: 2026 Specialist Hub", layout="wide")
 
@@ -8,7 +8,6 @@ st.set_page_config(page_title="ReadyAudit: 2026 Specialist Hub", layout="wide")
 if "count" not in st.session_state: st.session_state.count = 4000
 if "hole" not in st.session_state: st.session_state.hole = "Human Appeal Path"
 if "pitch" not in st.session_state: st.session_state.pitch = ""
-if "audit_report" not in st.session_state: st.session_state.audit_report = ""
 
 llm = get_llm(st.secrets)
 
@@ -29,14 +28,14 @@ with tab2:
     st.markdown(st.session_state.pitch)
 
 with tab1:
-    st.header("The Mechanic: Remediation Audit")
-    if not st.session_state.pitch:
-        st.warning("Run a Scout first to identify the statutory risk.")
-    else:
-        if st.button("🛠️ Generate Affirmative Defense Artifacts"):
-            with st.spinner("Building NIST-aligned protocols..."):
-                st.session_state.audit_report = perform_remediation(org_name, st.session_state.hole, st.session_state.count, llm)
-        st.markdown(st.session_state.audit_report)
+    st.header("The Mechanic: Remediation & Gap Analysis")
+    uploaded_file = st.file_uploader("Upload Technical Architecture/Policy File", type=['txt', 'pdf', 'md'])
+    if uploaded_file:
+        file_content = uploaded_file.read().decode("utf-8")
+        if st.button("🛠️ Run Gap Analysis"):
+            with st.spinner("Comparing against Law Database..."):
+                analysis_results = perform_gap_analysis(file_content, llm)
+                st.markdown(analysis_results)
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
