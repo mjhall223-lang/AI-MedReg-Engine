@@ -14,14 +14,16 @@ def scout_organization(org_name, llm):
             query = f"March 2026 {org_name} company AI clinical trial participants layoffs news"
             results = list(ddgs.text(query, max_results=5))
             news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
-    except: news_text = "Search offline."
+    except: 
+        news_text = "Search offline."
 
-    # FORMAT ENFORCER: Prevents the LLM from sending messy text to the sidebar
+    # ENTITY CLASSIFIER: Prevents the AI from treating 'Block' as a common noun
     analysis_prompt = f"""
-    Analyze the BUSINESS ENTITY '{org_name}' based on this news: {news_text[:1200]}
+    Analyze the BUSINESS ENTITY '{org_name}' for 2026 compliance.
+    News Context: {news_text[:1200]}
     
     1. Industry: (Fintech, MedTech, or Enterprise)
-    2. Beast Number: (Extract only the raw digits for staff affected OR trial subjects)
+    2. Beast Number: (Extract only raw digits for staff affected OR trial subjects)
     3. The Hole: (Identify the specific SB 24-205 requirement missing)
     
     REQUIRED OUTPUT: Industry | Number | Hole
