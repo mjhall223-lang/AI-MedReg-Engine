@@ -24,26 +24,28 @@ with tab2:
         with st.status(f"Hunting {org_name} 'Beast' triggers..."):
             news, analysis = scout_organization(org_name, llm)
             
+            # PARSING: Industry | Number | Hole
             try:
                 parts = analysis.split("|")
                 industry = parts[0].strip()
                 count = int(re.sub(r"\D", "", parts[1]))
                 hole = parts[2].strip()
             except:
-                industry, count, hole = "Enterprise", 10, "Impact Assessment Missing"
+                industry, count, hole = "Enterprise", 10, "Written Impact Assessment Missing"
             
             st.session_state.count = count
             st.session_state.hole = hole
             
-            # THE KILL SHOT PROMPT: Targets the specific Hole
+            # THE TAILORED PITCH PROMPT
             pitch_prompt = f"""
             March 16, 2026. Lead: {org_name}. Count: {count}. Industry: {industry}.
-            The Hole: {hole}. 
-            Draft a Specialist Pitch targeting the $20,000 violation risk under SB 25B-004.
-            Highlight the 'Affirmative Defense' Safe Harbor via NIST AI RMF. 
-            Crucial: Cite the June 30, 2026 Hard Start. 
-            For Block: Focus on 'Missing Human Appeal Path' for the 4,000 workers.
-            For Neuralink: Focus on 'Substantial Modification' for the 21-person trial.
+            The Hole: {hole}. News Context: {news[:500]}.
+            Draft a Specialist Pitch targeting the $20,000 violation risk.
+            CITE SB 25B-004 (the extension). 
+            Focus on the 'Affirmative Defense' Safe Harbor via NIST AI RMF. 
+            Highlight the June 30, 2026 'Hard Start' deadline.
+            If MedTech: Focus on 'Substantial Modification Audit' for the human subjects.
+            If Fintech: Focus on 'Human Appeal/Appeal Path' for the affected staff.
             """
             st.session_state.report = llm.invoke(pitch_prompt).content
             st.rerun() 
@@ -57,7 +59,9 @@ if st.session_state.report:
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info(f"Target Hole: {st.session_state.hole}")
-    st.session_state.count = st.number_input("Affected Personnel/Subjects:", value=st.session_state.count)
+    
+    # Value tied to state so 'Scout' results overwrite manual input
+    st.session_state.count = st.number_input("Affected Subjects/Personnel:", value=st.session_state.count)
     
     impact = SpecialistMath.calculate(st.session_state.count)
     st.metric("Statutory Risk (SB 24-205)", f"${impact['statutory']:,}")
