@@ -6,31 +6,34 @@ def get_llm(st_secrets):
     from langchain_groq import ChatGroq
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
-def find_live_news(company_name):
-    """SIFTER: Scrapes for the March 2026 'Beast' data points."""
+def scout_organization(org_name, llm):
+    """Sifts live 2026 data and classifies the risk type."""
     try:
         with DDGS() as ddgs:
-            # Sifts for the actual 2026 "Beast" news (e.g., Block's 4,237 layoffs)
-            query = f"March 2026 {company_name} AI automation layoffs clinical trial"
+            # Sifts for the actual 2026 triggers
+            query = f"March 2026 {org_name} AI automation layoffs clinical trial participants"
             results = list(ddgs.text(query, max_results=5))
-            if not results: return "No recent triggers found. Defaulting to baseline statutory risks."
-            return "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
-    except: return "Sifter offline. Using 2026 cached regulatory triggers."
+            news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
+    except:
+        news_text = "Search offline."
 
-def extract_headcount(text, llm):
-    """THE LOGIC: Pulls the 'Beast' number from raw news."""
-    prompt = f"Identify the specific number of people affected by AI automation in this text: {text[:2500]}. Output ONLY the raw digits."
-    response = llm.invoke(prompt).content
-    number = re.sub(r"\D", "", response)
-    # Block is 4237, Synchron is ~50. 
-    return int(number) if (number and 0 < len(number) < 8) else 10
+    # INDUSTRY CLASSIFIER: This is how the tool 'tailors' itself
+    classification_prompt = f"""
+    Analyze {org_name} and this news: {news_text[:1000]}
+    Determine:
+    1. Industry: (Fintech, MedTech, or Enterprise)
+    2. Beast Number: (Number of laid-off staff OR clinical trial participants)
+    3. Legal Trigger: (e.g., 'Consequential Decision' or 'Substantial Modification')
+    Return as: Industry | Number | Trigger
+    """
+    analysis = llm.invoke(classification_prompt).content
+    return news_text, analysis
 
-class EconomicImpact:
+class SpecialistMath:
     @staticmethod
-    def calculate_liability(headcount=0):
-        # Colorado SB 24-205 Statutory Rate: $20,000 per violation
-        # This fixes the $0 issue by ensuring the calculation is never null
-        statutory = (headcount if headcount > 0 else 10) * 20000 
+    def calculate(org_type, count):
+        # Colorado SB 24-205: $20,000 per violation
+        statutory = (count if count > 0 else 10) * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
 def create_pdf(text):
