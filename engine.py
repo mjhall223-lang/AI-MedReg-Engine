@@ -10,7 +10,7 @@ def scout_organization(org_name, llm):
     """SIFTER: Only pulls 2026 data for the SPECIFIC organization typed."""
     try:
         with DDGS() as ddgs:
-            # Query isolates the lead and forces 2026 context
+            # Isolates the lead and targets March 2026 news triggers
             query = f"March 2026 {org_name} AI clinical trial participants layoffs"
             results = list(ddgs.text(query, max_results=5))
             news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
@@ -31,8 +31,7 @@ class SpecialistMath:
     @staticmethod
     def calculate(count):
         # Colorado SB 24-205: $20,000 per violation
-        # Each 'Beast' subject is a violation count.
-        statutory = (count if count > 0 else 10) * 20000 
+        statutory = (count if count > 0 else 1) * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
 def create_pdf(text):
