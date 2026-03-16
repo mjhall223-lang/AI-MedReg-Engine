@@ -10,8 +10,8 @@ def get_llm(st_secrets):
 def find_live_news(company_name):
     """SIFTER: Scrapes for the March 2026 'Beast' data points."""
     try:
-        # 2026 DDGS syntax requires the context manager
         with DDGS() as ddgs:
+            # Query for actual 2026 triggers: Block (4k layoffs) or Synchron (50 trials)
             query = f"March 2026 {company_name} AI automation layoffs clinical trial"
             results = list(ddgs.text(query, max_results=5))
             if not results: return "No recent triggers found for this company."
@@ -20,22 +20,23 @@ def find_live_news(company_name):
         return f"Sifter connection error: {str(e)}"
 
 def extract_headcount(text, llm):
-    """The Logic: Pulls the specific number (e.g., 4237 for Block) from raw news."""
+    """THE LOGIC: Pulls the 'Beast' number (e.g., 4237 for Block) from raw news."""
     if "Sifter connection error" in text: return 10
-    prompt = f"Identify the specific number of people affected by AI automation or clinical trials in this text: {text[:2500]}. Output ONLY the digits."
+    prompt = f"Identify the specific number of people affected by AI automation or clinical trials in this text: {text[:2500]}. Output ONLY digits."
     response = llm.invoke(prompt).content
     number = re.sub(r"\D", "", response)
-    # Block is ~4000, Synchron is ~50.
+    # Block is ~4237, Synchron is ~50. Default to 10 if none found to avoid $0.
     return int(number) if (number and 0 < len(number) < 8) else 10
 
-class LiabilityEngine:
+class EconomicImpact:
     @staticmethod
-    def run_math(headcount):
+    def calculate_liability(headcount=0):
         # Colorado SB 24-205 Statutory Rate: $20,000 per violation
         statutory = headcount * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
-def create_pdf_bytes(text):
+def create_pdf(text):
+    """Returns raw bytes for 2026 Streamlit compatibility."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", size=11)
