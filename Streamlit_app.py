@@ -1,49 +1,33 @@
 import streamlit as st
-import re
-from engine import get_llm, scout_organization, perform_gap_analysis
+from engine import get_llm, perform_gap_analysis
 
-st.set_page_config(page_title="ReadyAudit: Specialist Hub", layout="wide")
-
-# Persistent State Management
-if "count" not in st.session_state: st.session_state.count = 4000
-if "hole" not in st.session_state: st.session_state.hole = "Human Appeal Path"
-if "pitch" not in st.session_state: st.session_state.pitch = ""
+st.set_page_config(page_title="ReadyAudit: Remediation Engine", layout="wide")
 
 llm = get_llm(st.secrets)
 
-tab1, tab2 = st.tabs(["📁 Remediation Audit", "🤖 Scout & Pitch"])
+st.header("📁 Remediation & Gap Analysis Engine")
+st.write("Upload a lead's technical architecture or AI policy to find the holes in their 2026 compliance.")
 
-with tab2:
-    st.header("The Hunter: Scout & Pitch")
-    org_name = st.text_input("Enter Lead Name", value="Block")
-    if st.button("🔍 Scout 2026 Triggers"):
-        with st.status("Sifting Regulations/Regulations/..."):
-            analysis = scout_organization(org_name, llm)
-            parts = [p.strip() for p in analysis.split("|")]
-            if len(parts) >= 3:
-                # Capture digits safely
-                digits = re.sub(r"\D", "", parts[1])
-                st.session_state.count = int(digits) if digits else 4000
-                st.session_state.hole = parts[2]
-                st.session_state.pitch = llm.invoke(f"Draft a board-level proposal for {org_name} to fill the ${st.session_state.count*20000:,} hole via a {parts[2]}.").content
-                st.rerun()
-    st.markdown(st.session_state.pitch)
+col1, col2 = st.columns([2, 1])
 
-with tab1:
-    st.header("The Mechanic: Remediation & Gap Analysis")
-    uploaded_file = st.file_uploader("Upload Company Tech/Policy File", type=['txt', 'pdf', 'md'])
-    if uploaded_file:
-        content = uploaded_file.read().decode("utf-8")
-        if st.button("🛠️ Run Gap Analysis"):
-            with st.spinner("Comparing against Law Database..."):
-                results = perform_gap_analysis(content, llm)
+with col1:
+    org_name = st.text_input("Entity Name (e.g., Block)", value="Block")
+    count = st.number_input("Affected Personnel (e.g., 4000 layoffs)", value=4000)
+    uploaded_file = st.file_uploader("Upload Tech/Policy File", type=['txt', 'pdf', 'md'])
+    
+    if st.button("🛠️ Run Remediation Audit"):
+        if uploaded_file:
+            content = uploaded_file.read().decode("utf-8")
+            with st.spinner("Sifting Regulations/Regulations folder..."):
+                results = perform_gap_analysis(content, org_name, count, llm)
                 st.markdown(results)
+        else:
+            st.warning("Please upload a file to begin the audit.")
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
-    st.info(f"Target Hole: {st.session_state.hole}")
-    st.session_state.count = st.number_input("Affected Count:", value=st.session_state.count)
-    statutory = st.session_state.count * 20000
+    statutory = count * 20000
     st.metric("Statutory Risk", f"${statutory:,}")
     st.metric("Total Governance Debt", f"${round(statutory * 1.25, 2):,}")
-    st.caption("Enforcement Cliff: June 30, 2026")
+    st.error("Enforcement Cliff: June 30, 2026")
+    st.caption("Tracking: SB 24-205, SB 25B-004, NIST AI RMF")
