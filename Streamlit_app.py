@@ -19,12 +19,10 @@ llm = get_llm(st.secrets)
 tab1, tab2 = st.tabs(["📁 Deep Audit", "🤖 Autonomous Hunter"])
 
 with tab2:
-    org_name = st.text_input("Enter Organization (e.g., 'Neuralink', 'Block')")
-    if st.button("🔍 Scout & Auto-Tailor"):
-        # RESET: Kill previous company's data
-        st.session_state.report = "" 
-        
-        with st.status(f"Hunting {org_name} triggers..."):
+    org_name = st.text_input("Enter Lead (e.g., 'Neuralink', 'Block')")
+    if st.button("🔍 Scout & Sift"):
+        st.session_state.report = "" # Clear old ghosts
+        with st.status(f"Hunting {org_name} 'Beast' triggers..."):
             news, analysis = scout_organization(org_name, llm)
             
             try:
@@ -38,15 +36,15 @@ with tab2:
             st.session_state.count = count
             st.session_state.hole = hole
             
-            # THE TAILORED PROMPT
+            # THE KILL SHOT PROMPT: Targets the June 30 Enforcement Cliff
             pitch_prompt = f"""
             March 16, 2026. Lead: {org_name}. Count: {count}. Industry: {industry}.
             The Hole: {hole}. 
-            Draft a Specialist Pitch for the June 30, 2026 CO deadline (SB 25B-004).
-            BANNED: Do not mention other companies or unrelated industries.
-            If MedTech: Focus on 'Substantial Modification Audit' for clinical trial subjects.
-            If Fintech: Focus on 'Human Appeal Path' for AI-replaced staff.
-            Cite the 'Affirmative Defense' Safe Harbor via NIST AI RMF.
+            Draft a Specialist Pitch targeting the $20,000 violation risk.
+            Cite SB 25B-004 (the extension) and the June 30, 2026 deadline.
+            Focus on 'Affirmative Defense' via NIST AI RMF. 
+            If MedTech (Neuralink): Focus on 'Substantial Modification Audit' for the 21 participants.
+            If Fintech (Block): Focus on 'Human Appeal Path' for the 4,000 AI-replaced staff.
             """
             st.session_state.report = llm.invoke(pitch_prompt).content
             st.rerun() 
@@ -54,13 +52,11 @@ with tab2:
 if st.session_state.report:
     st.markdown(f"### 🛡️ Specialized Pitch for {org_name}")
     st.markdown(st.session_state.report)
-    pdf = create_pdf(st.session_state.report)
-    st.download_button("📩 Download Pitch PDF", pdf, f"{org_name}_Pitch.pdf")
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
     st.info(f"Target Hole: {st.session_state.hole}")
-    st.session_state.count = st.number_input("Affected Subjects/Staff:", value=st.session_state.count)
+    st.session_state.count = st.number_input("Affected Personnel/Subjects:", value=st.session_state.count)
     
     impact = SpecialistMath.calculate(st.session_state.count)
     st.metric("Statutory Risk (SB 24-205)", f"${impact['statutory']:,}")
