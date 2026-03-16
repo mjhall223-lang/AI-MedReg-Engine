@@ -1,50 +1,43 @@
-import streamlit as st
-from engine import get_llm, list_all_laws, extract_pdf_text, web_sifter, generate_pdf_report
+import io
+import pypdf
+import requests
+from pathlib import Path
+from bs4 import BeautifulSoup
+from duckduckgo_search import DDGS
+from langchain_groq import ChatGroq
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
-st.set_page_config(page_title="ReadyAudit: Remediation Engine", layout="wide")
-llm = get_llm(st.secrets)
-all_laws = list_all_laws()
+def get_llm(st_secrets):
+    return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
-# CALLBACK for the Toggle All logic
-def update_selections():
-    if st.session_state.select_all_check:
-        st.session_state.selected_laws = all_laws
-    else:
-        st.session_state.selected_laws = []
+def list_all_laws():
+    """
+    TARGETED RECURSIVE SIFTER:
+    Finds PDFs specifically in your nested 'Regulations/Regulations' structure.
+    """
+    # We look inside the top-level Regulations folder for any nested PDFs
+    path_root = Path("Regulations")
+    # .rglob('*') handles Regulations/Regulations/Federal, etc.
+    return sorted([str(f.relative_to(path_root.parent)) for f in path_root.rglob('*.pdf')])
 
-if "audit_results" not in st.session_state: st.session_state.audit_results = ""
-if "hole_type" not in st.session_state: st.session_state.hole_type = "General"
+def generate_pdf_report(results, org_name, hole_type, selected_laws):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = [Paragraph(f"REMEDIATION AUDIT: {org_name}", styles['Title']), Spacer(1, 12)]
+    
+    penalty = "$20,000 per violation" if "Human" in hole_type else "$10,000 per violation"
+    story.append(Paragraph("FINANCIAL EXPOSURE SUMMARY", styles['Heading2']))
+    story.append(Paragraph(f"Statutory Risk: {penalty}", styles['Normal']))
+    story.append(Paragraph(f"Laws Audited: {', '.join(selected_laws)}", styles['Italic']))
+    story.append(Spacer(1, 18))
 
-with st.sidebar:
-    st.header("🛡️ LAW DATABASE")
-    st.checkbox("Select All Laws", value=True, key="select_all_check", on_change=update_selections)
-    current_selections = st.multiselect("Active Audit Laws:", options=all_laws, key="selected_laws")
-    st.divider()
-    st.error("Enforcement Cliff: June 30, 2026")
-
-st.header("📁 Remediation & Gap Analysis Engine")
-mode = st.radio("Audit Mode:", ["Web Sifter (Public Policy)", "File Upload (Private Docs)"])
-org_name = st.text_input("Lead Entity", value="Synchron")
-
-# CONTENT HANDLING
-content = ""
-if mode == "Web Sifter (Public Policy)":
-    if st.button("🔍 Sift Public Web"):
-        content = web_sifter(org_name)
-        st.success("Public Policy found.")
-else:
-    f = st.file_uploader("Upload Policy PDF", type=['pdf'])
-    if f: content = extract_pdf_text(f)
-
-# THE AUDIT
-if st.button("🛠️ Run Remediation Audit") and content:
-    with st.status(f"Auditing {org_name}..."):
-        # Audit logic here
-        st.session_state.audit_results = llm.invoke(f"Audit {org_name} against {current_selections}. Content: {content[:4000]}").content
-        if "human" in st.session_state.audit_results.lower(): st.session_state.hole_type = "Human Appeal"
-        st.markdown(st.session_state.audit_results)
-
-# PDF EXPORT
-if st.session_state.audit_results:
-    pdf = generate_pdf_report(st.session_state.audit_results, org_name, st.session_state.hole_type, current_selections)
-    st.download_button("📥 Download PDF Report", data=pdf, file_name=f"{org_name}_Audit.pdf")
+    for line in results.split('\n'):
+        if line.strip():
+            story.append(Paragraph(line, styles['Normal']))
+            story.append(Spacer(1, 6))
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
