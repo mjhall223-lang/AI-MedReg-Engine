@@ -4,6 +4,7 @@ from engine import get_llm, scout_organization
 
 st.set_page_config(page_title="ReadyAudit", layout="wide")
 
+# Persistent State
 if "count" not in st.session_state: st.session_state.count = 1
 if "report" not in st.session_state: st.session_state.report = ""
 if "hole" not in st.session_state: st.session_state.hole = "Governance Gap"
@@ -12,25 +13,28 @@ llm = get_llm(st.secrets)
 
 org_name = st.text_input("Enter Lead", value="Block")
 if st.button("🔍 Scout & Sift"):
-    with st.status(f"Hunting {org_name}..."):
+    with st.status(f"Hunting {org_name} triggers..."):
         news, analysis = scout_organization(org_name, llm)
         parts = [p.strip() for p in analysis.split("|")]
         if len(parts) >= 3:
-            # SAFETY NET: Rips digits, but handles empty strings
+            # SAFETY NET: Rips digits, but defaults to 1 instead of 0
             digits = re.sub(r"\D", "", parts[1])
-            st.session_state.count = int(digits) if digits else 1
+            st.session_state.count = int(digits) if (digits and int(digits) > 0) else 1
             st.session_state.hole = parts[2]
             
-            # Update Pitch
-            st.session_state.report = llm.invoke(f"Draft 2026 pitch for {org_name} regarding {parts[2]}").content
+            # Cites the June 30, 2026 Enforcement Cliff (SB 25B-004)
+            st.session_state.report = llm.invoke(f"Pitch for {org_name}. Count: {st.session_state.count}. Hole: {parts[2]}. Deadline: June 30, 2026.").content
             st.rerun()
 
 st.markdown(st.session_state.report)
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
-    st.info(f"Hole: {st.session_state.hole}")
+    st.info(f"Target Hole: {st.session_state.hole}")
     st.session_state.count = st.number_input("Count:", value=st.session_state.count)
+    
+    # Statutory Calculation: $20,000 per violation
     statutory = st.session_state.count * 20000
     st.metric("Statutory Risk", f"${statutory:,}")
-    st.caption("Deadline: June 30, 2026")
+    st.metric("Governance Debt", f"${round(statutory * 1.25, 2):,}")
+    st.caption("Enforcement Cliff: June 30, 2026")
