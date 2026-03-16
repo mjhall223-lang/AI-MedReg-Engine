@@ -1,19 +1,53 @@
-import io
-import pypdf
+import io, pypdf, requests
 from pathlib import Path
+from bs4 import BeautifulSoup
+from duckduckgo_search import DDGS
+from langchain_groq import ChatGroq
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
-def list_all_laws():
-    """
-    ULTRA-RECURSIVE: Hunts for PDFs specifically for your 
-    Regulations/Regulations structure.
-    """
-    laws = []
+def get_llm(st_secrets):
+    return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
+
+def list_all_laws(base_dir="Regulations"):
+    """ULTRA-RECURSIVE: Finds PDFs in any subfolder regardless of nesting."""
+    path_root = Path(base_dir)
+    if not path_root.exists(): return []
+    return sorted([str(f.relative_to(path_root.parent)) for f in path_root.rglob('*.pdf')])
+
+def web_sifter(org_name):
+    """SMART SIFTER: Hunts for BCI/Clinical data if standard policy fails."""
     try:
-        # Start at the root Regulations folder
-        path_root = Path("Regulations")
-        if path_root.exists():
-            # .rglob('*') finds PDFs in ANY subfolder (Colorado, Federal, etc.)
-            laws = sorted([str(f.relative_to(path_root.parent)) for f in path_root.rglob('*.pdf')])
-    except Exception:
-        pass # Prevents the blank screen if pathing is locked
-    return laws
+        with DDGS() as ddgs:
+            # Broadened query for 2026 neural tech
+            q = f"{org_name} AI governance ethics clinical trials privacy 2026"
+            results = list(ddgs.text(q, max_results=2))
+            if not results: return "Error: No public results found for this entity."
+            
+            url = results[0]['href']
+            res = requests.get(url, timeout=10)
+            soup = BeautifulSoup(res.text, 'html.parser')
+            for junk in soup(["script", "style", "nav", "footer"]): junk.extract()
+            return f"SOURCE: {url}\n\n" + soup.get_text(separator=' ', strip=True)
+    except Exception as e:
+        return f"Web Sifter Error: {str(e)}"
+
+def perform_gap_analysis(content, laws, org, llm):
+    prompt = f"Audit {org} against {laws}. Today is March 16, 2026. Find the 'Holes'. Content: {content[:4000]}"
+    return llm.invoke(prompt).content
+
+def generate_pdf_report(results, org_name, hole_type, laws):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = [Paragraph(f"REMEDIATION AUDIT: {org_name}", styles['Title']), Spacer(1,12)]
+    penalty = "$20,000 per violation" if "Human" in hole_type else "$10,000 per violation"
+    story.append(Paragraph(f"Financial Exposure: {penalty}", styles['Normal']))
+    story.append(Paragraph(f"Audited Against: {', '.join(laws)}", styles['Italic']))
+    story.append(Spacer(1,12))
+    for line in results.split('\n'):
+        if line.strip(): story.append(Paragraph(line, styles['Normal']))
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
