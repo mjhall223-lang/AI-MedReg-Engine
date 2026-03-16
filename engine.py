@@ -7,22 +7,22 @@ def get_llm(st_secrets):
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
 def scout_organization(org_name, llm):
-    """Sifts live March 2026 data for 'Beast' triggers (layoffs/trials/subjects)."""
+    """Sifts live March 2026 data and classifies industry-specific Holes."""
     try:
         with DDGS() as ddgs:
-            # Query for the actual March 2026 triggers
-            query = f"March 2026 {org_name} AI automation layoffs clinical trial human subjects"
+            # Sifts for the actual 2026 triggers (4k layoffs or 21-person trials)
+            query = f"March 2026 {org_name} AI automation layoffs clinical trial participants"
             results = list(ddgs.text(query, max_results=5))
             news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
-    except: news_text = "Search offline. Using 2026 cached regulatory triggers."
+    except: news_text = "Search offline. Using 2026 cached triggers."
 
     # INDUSTRY CLASSIFIER: Tailors the sifting to the specific hole
     analysis_prompt = f"""
     Analyze {org_name} and this news: {news_text[:1200]}
     1. Industry: (Fintech, MedTech, or Enterprise)
-    2. Beast Number: (Extract only the raw number of staff affected OR trial participants)
-    3. The Hole: (Identify the specific SB 24-205 gap: e.g., Missing Human Appeal or Modification Audit)
-    Return ONLY: Industry | Number | Hole
+    2. Beast Number: (Extract only raw digits for layoffs OR trial participants)
+    3. The Hole: (Identify the specific SB 24-205 requirement they are missing)
+    Return format: Industry | Number | Hole
     """
     analysis = llm.invoke(analysis_prompt).content
     return news_text, analysis
@@ -31,7 +31,6 @@ class SpecialistMath:
     @staticmethod
     def calculate(count):
         # Colorado SB 24-205: $20,000 per violation
-        # Each 'Beast' subject (laid off worker/trial patient) is a violation count.
         statutory = (count if count > 0 else 10) * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
 
