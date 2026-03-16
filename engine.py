@@ -7,27 +7,25 @@ def get_llm(st_secrets):
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
 def scout_organization(org_name, llm):
-    """SIFTER: Only pulls 2026 data for the SPECIFIC company typed."""
+    """SIFTER: Only pulls March 2026 data for the SPECIFIC company."""
     try:
         with DDGS() as ddgs:
-            # Query targets 2026 news and isolates the lead
-            query = f"March 2026 {org_name} company AI clinical trial participants layoffs news"
+            # Query targets the actual 2026 triggers (4,000 layoffs or 21 trials)
+            query = f"March 2026 {org_name} AI clinical trial participants layoffs news"
             results = list(ddgs.text(query, max_results=5))
             news_text = "\n\n".join([f"{r['title']}: {r['body']}" for r in results])
-    except: 
-        news_text = "Search offline."
+    except: news_text = "Search offline."
 
-    # ENTITY CLASSIFIER: Prevents the AI from treating 'Block' as a common noun
+    # ENCAPSULATION: Forces the LLM to return a clean, pipe-separated string
     analysis_prompt = f"""
     Analyze the BUSINESS ENTITY '{org_name}' for 2026 compliance.
     News Context: {news_text[:1200]}
     
     1. Industry: (Fintech, MedTech, or Enterprise)
-    2. Beast Number: (Extract only raw digits for staff affected OR trial subjects)
-    3. The Hole: (Identify the specific SB 24-205 requirement missing)
+    2. Beast Number: (Extract only the raw digits for staff affected OR trial subjects)
+    3. The Hole: (Which SB 24-205 requirement is this specific company missing?)
     
     REQUIRED OUTPUT: Industry | Number | Hole
-    Example: MedTech | 21 | Substantial Modification Audit
     """
     analysis = llm.invoke(analysis_prompt).content
     return news_text, analysis
@@ -35,6 +33,6 @@ def scout_organization(org_name, llm):
 class SpecialistMath:
     @staticmethod
     def calculate(count):
-        # Colorado SB 24-205: $20,000 per violation
+        # Colorado SB 24-205: $20,000 per violation (per subject/employee)
         statutory = (count if count > 0 else 1) * 20000 
         return {"statutory": statutory, "total": round(statutory * 1.25, 2)}
