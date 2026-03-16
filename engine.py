@@ -1,26 +1,30 @@
-import re
-from duckduckgo_search import DDGS 
+import os
+from pathlib import Path
+from langchain_groq import ChatGroq
 
 def get_llm(st_secrets):
-    from langchain_groq import ChatGroq
-    # Use the 2026-spec Llama 3.3 for high-stakes policy sifting
     return ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", api_key=st_secrets["GROQ_API_KEY"])
 
-def perform_gap_analysis(file_content, org_name, llm):
-    """THE MECHANIC: Sifts technical files for statutory 'Holes'."""
+def list_all_laws(base_dir="Regulations"):
+    """Recursively finds all PDF laws in your nested folder structure."""
+    laws = []
+    # .rglob('*') handles your 'Regulations/Regulations' nesting automatically
+    path_root = Path(base_dir)
+    for file in path_root.rglob('*.pdf'):
+        # We store the relative path so the tool knows exactly which folder it's in
+        laws.append(str(file.relative_to(path_root.parent)))
+    return sorted(laws)
+
+def perform_gap_analysis(file_content, selected_laws, llm):
+    """Audits the uploaded file against ONLY the toggled laws."""
+    # Logic to read the selected_laws text and compare
+    laws_context = f"Auditing against: {', '.join(selected_laws)}"
+    
     gap_prompt = f"""
-    Perform a DEEP GAP ANALYSIS for {org_name}.
-    Context: Today is March 16, 2026. The SB 25B-004 cliff is June 30, 2026.
+    Perform a DEEP GAP ANALYSIS.
+    Context: {laws_context}
+    Target Architecture: {file_content[:3000]}
     
-    HIERARCHY CHECK:
-    - Regulations/Colorado: SB 24-205 (Consumer Protection)
-    - Regulations/Federal: FDA PCCP / NIST AI RMF (Affirmative Defense)
-    
-    Technical File Content: {file_content[:4000]}
-    
-    TASKS:
-    1. Identify 'The Hole': Which specific statutory artifact is missing?
-    2. Affirmative Defense Score: Alignment with NIST AI RMF.
-    3. Remediation: 3 steps to fill the hole before June 30.
+    Identify specific missing compliance artifacts required by these laws.
     """
     return llm.invoke(gap_prompt).content
