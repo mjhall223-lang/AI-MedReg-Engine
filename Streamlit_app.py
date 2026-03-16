@@ -1,8 +1,8 @@
 import streamlit as st
 import re
-from engine import get_llm, scout_organization, perform_gap_analysis
+from engine import get_llm, scout_organization, perform_gap_analysis, safe_int
 
-st.set_page_config(page_title="ReadyAudit: 2026 Specialist Hub", layout="wide")
+st.set_page_config(page_title="ReadyAudit: Specialist Hub", layout="wide")
 
 # Persistent State
 if "count" not in st.session_state: st.session_state.count = 4000
@@ -21,21 +21,23 @@ with tab2:
             analysis = scout_organization(org_name, llm)
             parts = [p.strip() for p in analysis.split("|")]
             if len(parts) >= 3:
-                st.session_state.count = int(re.sub(r"\D", "", parts[1]))
+                # FIX: Using safe_int to prevent red screen error
+                st.session_state.count = safe_int(parts[1], fallback=4000)
                 st.session_state.hole = parts[2]
-                st.session_state.pitch = llm.invoke(f"Draft a board-level proposal for {org_name} to fill the ${st.session_state.count*20000:,} hole via a {parts[2]}.").content
+                st.session_state.pitch = llm.invoke(f"Draft a board-level proposal for {org_name} regarding the {parts[2]} hole.").content
                 st.rerun()
     st.markdown(st.session_state.pitch)
 
 with tab1:
     st.header("The Mechanic: Remediation & Gap Analysis")
-    uploaded_file = st.file_uploader("Upload Technical Architecture/Policy File", type=['txt', 'pdf', 'md'])
+    st.write("Upload a company's technical architecture or AI policy to find the holes.")
+    uploaded_file = st.file_uploader("Upload Tech/Policy File", type=['txt', 'pdf', 'md'])
     if uploaded_file:
-        file_content = uploaded_file.read().decode("utf-8")
+        content = uploaded_file.read().decode("utf-8")
         if st.button("🛠️ Run Gap Analysis"):
             with st.spinner("Comparing against Law Database..."):
-                analysis_results = perform_gap_analysis(file_content, llm)
-                st.markdown(analysis_results)
+                results = perform_gap_analysis(content, "", llm)
+                st.markdown(results)
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
