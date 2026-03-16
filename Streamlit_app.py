@@ -1,24 +1,13 @@
-import sys
-import os
-import re  # FIX: Crucial for Line 34 to work
 import streamlit as st
-
-# FORCE PATH FIX: For Streamlit Cloud compatibility
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-
-from engine import (
-    get_llm, scout_organization, EconomicImpact, 
-    create_pdf
-)
+import re
+from engine import get_llm, scout_organization, SpecialistMath
 
 st.set_page_config(page_title="ReadyAudit: Specialist Hub", layout="wide")
 
-# Persistent State Management
+# Persistent State
 if "count" not in st.session_state: st.session_state.count = 10
-if "scout_report" not in st.session_state: st.session_state.scout_report = ""
-if "trigger" not in st.session_state: st.session_state.trigger = "General Governance"
+if "report" not in st.session_state: st.session_state.report = ""
+if "hole" not in st.session_state: st.session_state.hole = "General Governance"
 
 llm = get_llm(st.secrets)
 
@@ -30,47 +19,36 @@ with tab2:
         with st.status(f"Hunting {org_name} triggers..."):
             news, analysis = scout_organization(org_name, llm)
             
-            # SAFE PARSING: Industry | Number | Trigger
+            # PARSING: Industry | Number | Hole
             try:
                 parts = analysis.split("|")
                 industry = parts[0].strip()
-                count_str = re.sub(r"\D", "", parts[1])
-                count = int(count_str) if count_str else 10
-                trigger = parts[2].strip()
+                count = int(re.sub(r"\D", "", parts[1]))
+                hole = parts[2].strip()
             except:
-                industry, count, trigger = "Enterprise", 10, "General Governance"
+                industry, count, hole = "Enterprise", 10, "Impact Assessment Missing"
             
-            # Injecting findings into state
             st.session_state.count = count
-            st.session_state.trigger = trigger
-            math = EconomicImpact.calculate(count)
+            st.session_state.hole = hole
+            math = SpecialistMath.calculate(count)
             
-            # THE TAILORED PITCH PROMPT
+            # TAILORED PITCH PROMPT
             pitch_prompt = f"""
-            Context: March 16, 2026. Lead: {org_name}. Count: {count}. Industry: {industry}.
-            Trigger: {trigger}. News: {news[:500]}.
-            Deadline: June 30 Colorado AI Act (SB 24-205 & SB 25B-004).
+            March 16, 2026. Lead: {org_name}. Count: {count}. Industry: {industry}.
+            The Hole: {hole}. 
             Draft a Specialist Pitch targeting the $20,000 violation risk. 
-            Highlight the 'Affirmative Defense' Safe Harbor via NIST AI RMF. 
-            If MedTech: Focus on 'Patient Safety & Clinical Trial Integrity'.
-            If Fintech: Focus on 'Algorithmic Discrimination in Hiring/Lending'.
-            No fluff. Go straight to the financial crisis.
+            CITE SB 25B-004 (the extension). 
+            Focus on the 'Affirmative Defense' via NIST AI RMF. 
+            Highlight the June 30, 2026 deadline.
             """
-            st.session_state.scout_report = llm.invoke(pitch_prompt).content
+            st.session_state.report = llm.invoke(pitch_prompt).content
             st.rerun() 
 
-    if st.session_state.scout_report:
-        st.markdown(st.session_state.scout_report)
-        pdf = create_pdf(st.session_state.scout_report)
-        st.download_button("📩 Download Pitch PDF", pdf, f"{org_name}_Pitch.pdf")
+if st.session_state.report:
+    st.markdown(f"### 🛡️ Specialized Pitch for {org_name}")
+    st.markdown(st.session_state.report)
 
 with st.sidebar:
     st.header("🛡️ SPECIALIST PANEL")
-    st.info(f"Detected Trigger: {st.session_state.trigger}")
-    
-    # Linked to state so the 'Scout' results overwrite the manual input
-    st.session_state.count = st.number_input("Affected Subjects/Staff:", value=st.session_state.count)
-    
-    impact = EconomicImpact.calculate(st.session_state.count)
-    st.metric("Statutory Risk (SB 24-205)", f"${impact['statutory']:,}")
-    st.metric("Total Governance Debt", f"${impact['total']:,}")
+    st.info(f"Target Hole: {st.session_state.hole}")
+    st.metric("Statutory Risk", f"${SpecialistMath.calculate(st.session_state.count)['statutory']:,}")
