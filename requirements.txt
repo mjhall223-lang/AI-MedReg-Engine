@@ -1,7 +1,19 @@
+# --- Core Web Application ---
 streamlit>=1.42.0
 langchain-groq>=1.1.2
-duckduckgo-search>=7.1.0
 pypdf>=5.1.0
 beautifulsoup4>=4.13.0
 requests>=2.32.0
 reportlab>=4.4.10
+
+# --- Data Collection ---
+duckduckgo-search>=7.1.0
+
+# --- A-Level: Testing & Mocking ---
+# Satisfies: 'Unit tests' and 'Using mock objects'
+pytest>=8.0.0
+pytest-mock>=3.12.0
+
+# --- A-Level: Production Monitoring ---
+# Satisfies: 'Production monitoring instrumenting'
+langsmith>=0.1.0
