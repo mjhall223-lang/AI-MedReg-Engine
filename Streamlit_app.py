@@ -30,15 +30,16 @@ mode = st.radio("Sourcing Mode:", ["Web Sifter", "Link Paste", "Manual Paste", "
 
 # --- INGESTION LOGIC ---
 if mode == "Web Sifter" and st.button("🔍 Sift Web"):
-    with st.spinner("Searching for entity data..."):
-        st.session_state.audit_content = smart_web_sifter(org_name)
-    st.toast("Data Ingested.")
+    with st.spinner("Firecrawl is sifting for 2026 entity data..."):
+        # Passing st.secrets here to allow Firecrawl to auth
+        st.session_state.audit_content = smart_web_sifter(org_name, st.secrets)
+    st.toast("Data Ingested via Firecrawl.")
 
 elif mode == "Link Paste":
     target_url = st.text_input("Paste Regulatory/Policy URL:")
     if st.button("🔗 Fetch Content") and target_url:
-        with st.spinner("Scraping target URL..."):
-            st.session_state.audit_content = scrape_url(target_url)
+        with st.spinner("Scraping clean Markdown via Firecrawl..."):
+            st.session_state.audit_content = scrape_url(target_url, st.secrets)
         st.success("Content Loaded.")
 
 elif mode == "Manual Paste":
