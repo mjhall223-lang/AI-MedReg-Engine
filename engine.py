@@ -25,6 +25,11 @@ REMEDIATION_TEMPLATES = {
     <b>Review Team:</b> Dedicated Neuromodulation Specialists and Compliance Officers.<br/>
     <b>Timeline:</b> Initial response within 2 business days; full resolution within 5 business days.<br/>
     <b>Outcome:</b> Successful appeals will trigger a manual re-calibration of the Chiral™ decoder baseline.
+    """,
+    "EPA/Environmental": """
+    <b>[REMEDIATION ATTACHMENT: Environmental Disclosure]</b><br/><br/>
+    <b>Scope:</b> Required for Tier II reporting and PFAS expanded disclosure for 2026.<br/>
+    <b>Action:</b> Audit hazardous waste manifests against DOT 49 CFR requirements.
     """
 }
 
@@ -46,7 +51,7 @@ def extract_pdf_text(uploaded_file):
     return "".join([p.extract_text() for p in reader.pages if p.extract_text()])
 
 def smart_web_sifter(org_name, st_secrets):
-    """Upgraded sifter using Firecrawl for high-fidelity Markdown retrieval."""
+    """Upgraded sifter using Firecrawl with corrected SDK syntax."""
     try:
         api_key = st_secrets.get("FIRECRAWL_API_KEY")
         if not api_key:
@@ -54,19 +59,19 @@ def smart_web_sifter(org_name, st_secrets):
         
         app = FirecrawlApp(api_key=api_key)
         
-        # Optimized query for 2026 Med-AI compliance
-        query = f"{org_name} Chiral AI cognitive governance clinical ethics 2026"
+        # Query covers both Medical AI and Environmental Compliance
+        query = f"{org_name} regulatory compliance EPA DOT Chiral AI governance 2026"
         
-        # Search & Scrape in one go
-        search_result = app.search(query, params={
-            'limit': 3,
-            'scrapeOptions': {'formats': ['markdown']}
-        })
+        # CORRECTED SYNTAX: Remove 'params=' and use keyword arguments directly
+        search_result = app.search(
+            query,
+            limit=3,
+            scrape_options={'formats': ['markdown']}
+        )
         
         if not search_result.get('data'):
             return "Error: No public results found for this entity."
             
-        # Combine results into structured context
         combined_markdown = ""
         for page in search_result['data']:
             url = page.get('url', 'Unknown Source')
@@ -78,11 +83,16 @@ def smart_web_sifter(org_name, st_secrets):
         return f"Firecrawl Error: {str(e)}"
 
 def scrape_url(url, st_secrets):
-    """Single URL scrape using Firecrawl to bypass bot detection."""
+    """Single URL scrape using Firecrawl with corrected SDK syntax."""
     try:
         api_key = st_secrets.get("FIRECRAWL_API_KEY")
         app = FirecrawlApp(api_key=api_key)
-        scrape_result = app.scrape_url(url, params={'formats': ['markdown']})
+        
+        # CORRECTED SYNTAX: Remove 'params='
+        scrape_result = app.scrape_url(
+            url, 
+            formats=['markdown']
+        )
         return f"SOURCE: {url}\n\n" + scrape_result.get('markdown', 'No content.')
     except Exception as e:
         return f"Scrape Error: {str(e)}"
@@ -98,7 +108,8 @@ def perform_gap_analysis(content, laws, org, llm):
     1. Flag 'Intention-to-Action' (Cognitive AI).
     2. Colorado SB 24-205: Flag missing 'Human Appeal Path'.
     3. NIST 800-171 Rev 3: Check 'Supply Chain Risk Management' (SCRM).
-    4. CITE PENALTY: $20,000 per violation.
+    4. ENVIRONMENTAL: Flag EPA PFAS reporting gaps or DOT hazardous waste manifest issues.
+    5. CITE PENALTY: $20,000 per violation.
     """
     response = llm.invoke([("system", system_prompt), ("human", content[:15000])])
     return response.content
@@ -118,9 +129,16 @@ def generate_pdf_report(results, org_name, laws):
     for line in results.split('\n'):
         if line.strip(): story.append(Paragraph(line, styles['Normal']))
     
+    # Logic to include Environmental or Medical specific remediation plans
+    if "EPA" in results or "hazardous" in results.lower():
+        story.append(PageBreak())
+        story.append(Paragraph("ENVIRONMENTAL REMEDIATION PLAN", styles['Heading2']))
+        story.append(Spacer(1,12))
+        story.append(Paragraph(REMEDIATION_TEMPLATES["EPA/Environmental"], styles['Normal']))
+    
     if "Colorado SB 24-205" in str(laws) and ("FLAGGED" in results or "missing" in results.lower()):
         story.append(PageBreak())
-        story.append(Paragraph("AUTO-GENERATED REMEDIATION PLAN", styles['Heading2']))
+        story.append(Paragraph("AUTO-GENERATED AI REMEDIATION PLAN", styles['Heading2']))
         story.append(Spacer(1,12))
         story.append(Paragraph(REMEDIATION_TEMPLATES["Colorado SB 24-205"], styles['Normal']))
         
