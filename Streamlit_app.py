@@ -7,7 +7,6 @@ from engine import (
 
 st.set_page_config(page_title="AI-MedReg-Engine | 2026 Compliance", layout="wide")
 
-# --- SESSION STATE ---
 if "audit_content" not in st.session_state: st.session_state.audit_content = ""
 if "audit_results" not in st.session_state: st.session_state.audit_results = ""
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
@@ -28,17 +27,15 @@ st.header("🔬 Remediation & Statutory Audit Engine")
 org_name = st.text_input("Lead Entity", value="Synchron")
 mode = st.radio("Sourcing Mode:", ["Web Sifter", "Link Paste", "Manual Paste", "File Upload"], horizontal=True)
 
-# --- INGESTION LOGIC ---
 if mode == "Web Sifter" and st.button("🔍 Sift Web"):
-    with st.spinner("Firecrawl is sifting for 2026 entity data..."):
-        # Passing st.secrets here to allow Firecrawl to auth
+    with st.spinner("Sifting the web via Firecrawl..."):
         st.session_state.audit_content = smart_web_sifter(org_name, st.secrets)
-    st.toast("Data Ingested via Firecrawl.")
+    st.toast("Data Ingested.")
 
 elif mode == "Link Paste":
     target_url = st.text_input("Paste Regulatory/Policy URL:")
     if st.button("🔗 Fetch Content") and target_url:
-        with st.spinner("Scraping clean Markdown via Firecrawl..."):
+        with st.spinner("Scraping clean Markdown..."):
             st.session_state.audit_content = scrape_url(target_url, st.secrets)
         st.success("Content Loaded.")
 
@@ -52,14 +49,13 @@ elif mode == "File Upload":
 if debug_mode and st.session_state.audit_content:
     with st.expander("🛠️ DEBUG: Ingested Content"): st.text(st.session_state.audit_content)
 
-# --- AUDIT EXECUTION ---
 if st.button("🛠️ Run Statutory Audit"):
     if st.session_state.audit_content:
         with st.status("🔍 Analyzing against Regulatory Stack...") as status:
             st.session_state.audit_results = perform_gap_analysis(st.session_state.audit_content, current_laws, org_name, llm)
             status.update(label="✅ Audit Complete!", state="complete")
     else:
-        st.warning("Please load content using one of the sourcing modes above.")
+        st.warning("Please load content first.")
 
 if st.session_state.audit_results:
     st.markdown("### 📋 Audit Findings")
@@ -67,13 +63,12 @@ if st.session_state.audit_results:
     pdf = generate_pdf_report(st.session_state.audit_results, org_name, current_laws)
     st.download_button("📥 Download PDF Report & Remediation Plan", data=pdf, file_name=f"{org_name}_Audit_2026.pdf")
 
-# --- CONSULTATION ---
 st.divider()
 st.subheader("💬 Regulatory Consultation")
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-if user_query := st.chat_input("Ask a follow-up about these findings..."):
+if user_query := st.chat_input("Ask a follow-up..."):
     st.session_state.chat_history.append({"role": "user", "content": user_query})
     with st.chat_message("user"): st.markdown(user_query)
     with st.chat_message("assistant"):
