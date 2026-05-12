@@ -46,32 +46,44 @@ def extract_pdf_text(uploaded_file):
     return "".join([p.extract_text() for p in reader.pages if p.extract_text()])
 
 def smart_web_sifter(org_name, st_secrets):
-    """Upgraded sifter using Firecrawl v2 SDK with Object-Dot notation."""
+    """Robust sifter that handles dictionary, .data, or .results return types."""
     try:
         api_key = st_secrets.get("FIRECRAWL_API_KEY")
         if not api_key:
             return "Error: FIRECRAWL_API_KEY missing from secrets."
         
         app = FirecrawlApp(api_key=api_key)
-        
-        # Medical AI and Chiral specific governance query
         query = f"{org_name} Chiral AI cognitive governance clinical ethics 2026"
         
-        # v2 SDK Search call
+        # Call search with standard v2 formatting
         search_result = app.search(
             query,
             limit=3,
             scrape_options={'formats': ['markdown']}
         )
         
-        # Accessing the .data attribute directly (Fix for SearchData error)
-        if not search_result.data:
+        # --- VERSION-AGNOSTIC DATA EXTRACTION ---
+        results_list = []
+        if hasattr(search_result, 'data'):
+            results_list = search_result.data
+        elif hasattr(search_result, 'results'):
+            results_list = search_result.results
+        elif isinstance(search_result, dict):
+            results_list = search_result.get('data', []) or search_result.get('results', [])
+        
+        if not results_list:
             return "Error: No public results found for this entity."
             
         combined_markdown = ""
-        for page in search_result.data:
-            url = getattr(page, 'url', 'Unknown Source')
-            md = getattr(page, 'markdown', 'No content found.')
+        for page in results_list:
+            # Handle both object-based and dict-based items
+            if isinstance(page, dict):
+                url = page.get('url', 'Unknown Source')
+                md = page.get('markdown', 'No content found.')
+            else:
+                url = getattr(page, 'url', 'Unknown Source')
+                md = getattr(page, 'markdown', 'No content found.')
+            
             combined_markdown += f"SOURCE: {url}\n\n{md}\n\n---\n\n"
             
         return combined_markdown
@@ -79,14 +91,17 @@ def smart_web_sifter(org_name, st_secrets):
         return f"Firecrawl Error: {str(e)}"
 
 def scrape_url(url, st_secrets):
-    """Single URL scrape using Firecrawl v2 syntax."""
+    """Robust single URL scrape for Firecrawl."""
     try:
         api_key = st_secrets.get("FIRECRAWL_API_KEY")
         app = FirecrawlApp(api_key=api_key)
-        
-        # In v2, scrape_url returns a response object with dot attributes
         scrape_result = app.scrape_url(url, formats=['markdown'])
-        md = getattr(scrape_result, 'markdown', 'No content found.')
+        
+        if isinstance(scrape_result, dict):
+            md = scrape_result.get('markdown', 'No content found.')
+        else:
+            md = getattr(scrape_result, 'markdown', 'No content found.')
+            
         return f"SOURCE: {url}\n\n" + md
     except Exception as e:
         return f"Scrape Error: {str(e)}"
